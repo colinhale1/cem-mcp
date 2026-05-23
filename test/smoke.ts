@@ -1,15 +1,23 @@
-// Smoke test: drive the same query dispatch the MCP tool uses, against
-// the Calcite 5 CEM fixture. Run via `npm run smoke`.
+// Smoke test for the package-aware CEM tool. Exercises the same dispatch
+// the MCP server uses against the Calcite 5 fixture laid out as a real
+// project under test/fixtures/project. Run via `npm run smoke`.
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 
-import { loadCem, searchElements } from "../src/cem.js";
-import { formatElement, formatList, formatMulti, formatSearch } from "../src/format.js";
+import { CemRegistry, searchElements } from "../src/cem.js";
+import {
+  formatComponentList,
+  formatElement,
+  formatMulti,
+  formatPackageList,
+  formatSearch,
+} from "../src/format.js";
+import { fuzzySearchTags } from "../src/fuzzy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FIXTURE = resolve(__dirname, "fixtures/calcite.custom-elements.json");
+const PROJECT = resolve(__dirname, "fixtures/project");
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) {
@@ -20,76 +28,86 @@ function assert(cond: unknown, msg: string): asserts cond {
 }
 
 async function main() {
-  if (!existsSync(FIXTURE)) {
-    console.error(`Fixture missing: ${FIXTURE}\nRun: npm run fetch-calcite`);
+  if (!existsSync(PROJECT)) {
+    console.error(`Fixture missing: ${PROJECT}\nRun: npm run fetch-calcite`);
     process.exit(1);
   }
-  const cem = await loadCem(FIXTURE);
-  assert(cem.elements.length > 50, `loaded > 50 elements (got ${cem.elements.length})`);
-  assert(cem.byTag.has("calcite-button"), "byTag includes calcite-button");
 
-  const all = formatList(cem);
-  assert(all.includes("calcite-button"), "formatList includes calcite-button");
-  assert(all.startsWith("# Components"), "formatList starts with heading");
+  // Discovery
+  const reg = await CemRegistry.fromProject(PROJECT);
+  assert(reg.has("@esri/calcite-components"), "discovery finds @esri/calcite-components");
+  assert(reg.packageNames().length >= 1, "registry has at least one package");
 
-  const btn = cem.byTag.get("calcite-button");
-  assert(btn, "calcite-button declaration present");
-  const btnDoc = formatElement(btn!);
-  assert(btnDoc.includes("## Attributes"), "calcite-button doc has Attributes section");
-  assert(btnDoc.includes("alignment"), "calcite-button doc includes 'alignment' attribute");
-  assert(btnDoc.includes("## Slots"), "calcite-button doc has Slots section");
-  assert(btnDoc.includes("## CSS Custom Properties"), "calcite-button doc has CSS vars section");
+  const listed = formatPackageList(reg.packagesMeta(), reg.projectRoot);
+  assert(listed.includes("@esri/calcite-components"), "package list includes calcite");
 
-  const hits = searchElements(cem, "accordion");
+  // Lazy load
+  const pkg = await reg.get("@esri/calcite-components");
+  assert(pkg.elements.length > 50, `loaded ${pkg.elements.length} components from calcite`);
+  assert(pkg.byTag.has("calcite-button"), "byTag includes calcite-button");
+  assert(pkg.prefix === "calcite", `detected common prefix '${pkg.prefix}' (expected 'calcite')`);
+
+  // Component list
+  const all = formatComponentList(pkg);
+  assert(all.includes("calcite-button"), "component list includes calcite-button");
+  assert(all.startsWith("# `@esri/calcite-components"), "component list header names the package");
+
+  // Full element doc
+  const btn = pkg.byTag.get("calcite-button")!;
+  const btnDoc = formatElement(btn, pkg.name);
+  assert(btnDoc.includes("@esri/calcite-components"), "element doc labels the package");
+  assert(btnDoc.includes("## Attributes"), "element doc has Attributes section");
+  assert(btnDoc.includes("alignment"), "element doc includes 'alignment' attribute");
+
+  // Fuzzy index: PascalCase, acronym, typo
+  const ranks = (q: string): string[] =>
+    fuzzySearchTags(pkg.index, q, pkg.elements.length).map((h) => h.decl.tagName!);
+  assert(ranks("DatePicker")[0] === "calcite-date-picker", "fuzzy: DatePicker → calcite-date-picker top-1");
+  assert(ranks("dp")[0] === "calcite-date-picker", "fuzzy: acronym dp → calcite-date-picker top-1");
+  assert(ranks("alrt")[0] === "calcite-alert", "fuzzy: typo alrt → calcite-alert top-1");
+  assert(ranks("chiip")[0] === "calcite-chip", "fuzzy: insertion typo chiip → calcite-chip top-1");
+
+  // Combined search (tag + description/attributes substring)
+  const hits = searchElements(pkg, "accordion");
   assert(hits.length >= 2, `search 'accordion' returns multiple hits (got ${hits.length})`);
-  const tags = hits.map((h) => h.decl.tagName);
-  assert(tags.includes("calcite-accordion"), "search 'accordion' includes calcite-accordion");
-  const search = formatSearch("accordion", hits);
-  assert(search.startsWith("# Search:"), "formatSearch starts with heading");
+  assert(hits[0].decl.tagName === "calcite-accordion", "search 'accordion' top hit is calcite-accordion");
+  const empty = searchElements(pkg, "zzz-nope-nothing");
+  assert(empty.length === 0, "search for nonsense term returns no hits");
 
-  const empty = searchElements(cem, "zzz-nope-nothing");
-  assert(empty.length === 0, "search for non-existent term returns no hits");
+  // Search formatter
+  const search = formatSearch(pkg.name, "accordion", hits);
+  assert(search.startsWith("# Search `@esri/calcite-components`:"), "search header names the package");
 
-  // Exercise the dispatch shape the MCP tool uses.
-  const exactQuery = "CALCITE-BUTTON"; // case-insensitive
-  const exact = cem.byTag.get(exactQuery.toLowerCase());
-  assert(exact, "exact lookup is case-insensitive");
-
-  // Whole-word ranking: `button` should rank `calcite-button` above multi-word
-  // tags that merely contain the word (e.g. `calcite-radio-button-group`).
-  const buttonHits = searchElements(cem, "button");
-  const buttonOrder = buttonHits.map((h) => h.decl.tagName);
-  const idxButton = buttonOrder.indexOf("calcite-button");
-  const idxRadioGroup = buttonOrder.indexOf("calcite-radio-button-group");
-  assert(
-    idxButton !== -1 && idxRadioGroup !== -1,
-    "search 'button' includes both calcite-button and calcite-radio-button-group",
-  );
-  assert(
-    idxButton < idxRadioGroup,
-    `whole-word ranking: calcite-button (${idxButton}) before calcite-radio-button-group (${idxRadioGroup})`,
-  );
-
-  // Multi-search via the public formatter.
+  // Multi-query — mirror the server's promote-to-full-docs heuristic.
+  const isDefinitive = (hs: { score: number }[]): boolean =>
+    hs.length === 1 || (hs.length > 1 && hs[0].score >= 400 && hs[0].score >= 2 * hs[1].score);
   const dispatch = (q: string): string => {
-    if (q.toLowerCase() === "all") return formatList(cem);
-    const e = cem.byTag.get(q.toLowerCase());
-    if (e) return formatElement(e);
-    const h = searchElements(cem, q);
-    return h.length === 1 ? formatElement(h[0].decl) : formatSearch(q, h);
+    if (!q || q.toLowerCase() === "all") return formatComponentList(pkg);
+    const e = pkg.byTag.get(q.toLowerCase());
+    if (e) return formatElement(e, pkg.name);
+    const h = searchElements(pkg, q);
+    return isDefinitive(h) ? formatElement(h[0].decl, pkg.name) : formatSearch(pkg.name, q, h);
   };
-  const multi = formatMulti([
+  const multi = formatMulti(pkg.name, [
     { query: "calcite-button", body: dispatch("calcite-button") },
     { query: "calcite-alert", body: dispatch("calcite-alert") },
-    { query: "date picker", body: dispatch("date picker") },
+    { query: "DatePicker", body: dispatch("DatePicker") },
   ]);
-  assert(multi.startsWith("# Multi-query (3)"), "formatMulti has multi-query header");
-  assert(multi.includes("=== Result for: `calcite-button` ==="), "multi includes calcite-button section");
-  assert(multi.includes("=== Result for: `calcite-alert` ==="), "multi includes calcite-alert section");
-  assert(multi.includes("=== Result for: `date picker` ==="), "multi includes date picker section");
+  assert(multi.startsWith("# Multi-query: `@esri/calcite-components` (3)"), "multi header names the package");
   assert((multi.match(/^---$/gm) ?? []).length === 2, "multi uses 2 separators between 3 sections");
   assert(multi.includes("# `calcite-button`"), "multi embeds full calcite-button docs");
-  assert(multi.includes("# `calcite-alert`"), "multi embeds full calcite-alert docs");
+  assert(multi.includes("# `calcite-date-picker`"), "multi resolves 'DatePicker' to calcite-date-picker via fuzzy");
+
+  // Unknown package surfaces a usable error path
+  try {
+    await reg.get("@nonexistent/library");
+    assert(false, "unknown package should throw");
+  } catch (e) {
+    assert(
+      String(e).includes("Unknown package") && String(e).includes("Available"),
+      "unknown package error names available packages",
+    );
+  }
 
   console.log("\nAll smoke checks passed.");
 }

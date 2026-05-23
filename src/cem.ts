@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { buildIndex, fuzzySearchTags, type FuzzyMatch, type TagIndex } from "./fuzzy.js";
+import { discoverPackages, type DiscoveredPackage } from "./discovery.js";
+
 // Minimal types covering the subset of CEM 2.x we read. The spec is open-ended,
 // so anything we don't model is preserved via index signature.
 export interface CemAttribute {
@@ -76,34 +79,101 @@ export interface CustomElementsManifest {
   [k: string]: unknown;
 }
 
-export interface LoadedCem {
+export interface LoadedPackage {
+  name: string;
+  version?: string;
+  cemPath: string;
   manifest: CustomElementsManifest;
-  elements: CemDeclaration[]; // declarations with a tagName
+  elements: CemDeclaration[];
   byTag: Map<string, CemDeclaration>;
-  sourcePath: string;
+  index: TagIndex[]; // pre-built fuzzy index over tag names
+  prefix: string; // common tag prefix (e.g. "calcite")
 }
 
-export async function loadCem(path: string): Promise<LoadedCem> {
-  const absolute = resolve(path);
-  const raw = await readFile(absolute, "utf8");
-  const manifest = JSON.parse(raw) as CustomElementsManifest;
-
-  if (!manifest || !Array.isArray(manifest.modules)) {
-    throw new Error(`File at ${absolute} is not a valid Custom Elements Manifest (missing modules array).`);
+async function loadManifest(cemPath: string): Promise<CustomElementsManifest> {
+  const raw = await readFile(cemPath, "utf8");
+  const parsed = JSON.parse(raw) as CustomElementsManifest;
+  if (!parsed || !Array.isArray(parsed.modules)) {
+    throw new Error(`Not a valid Custom Elements Manifest: ${cemPath}`);
   }
+  return parsed;
+}
 
+// HTML custom-element names must contain a hyphen and be ASCII-lowercase
+// (per the HTML spec). Some packages publish CEMs where `tagName` points to
+// the *symbol* of a constant holding the tag string (e.g. Vonage Vivid's
+// `VC_HEX_PICKER_TAG`) — the build tool couldn't resolve the reference. We
+// filter those out so the matcher only ever sees well-formed tags.
+function isValidCustomElementTag(tag: string): boolean {
+  return /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(tag);
+}
+
+function indexManifest(
+  meta: { name: string; version?: string; cemPath: string },
+  manifest: CustomElementsManifest,
+): LoadedPackage {
   const elements: CemDeclaration[] = [];
   const byTag = new Map<string, CemDeclaration>();
   for (const mod of manifest.modules) {
     for (const decl of mod.declarations ?? []) {
-      if (decl.tagName) {
-        elements.push(decl);
-        byTag.set(decl.tagName.toLowerCase(), decl);
-      }
+      if (!decl.tagName) continue;
+      if (!isValidCustomElementTag(decl.tagName)) continue;
+      elements.push(decl);
+      byTag.set(decl.tagName.toLowerCase(), decl);
     }
   }
+  const { index, prefix } = buildIndex(elements);
+  return { ...meta, manifest, elements, byTag, index, prefix };
+}
 
-  return { manifest, elements, byTag, sourcePath: absolute };
+export class CemRegistry {
+  private readonly packages = new Map<string, LoadedPackage>();
+  private readonly known = new Map<string, DiscoveredPackage>();
+  readonly projectRoot: string | null;
+
+  constructor(projectRoot: string | null) {
+    this.projectRoot = projectRoot;
+  }
+
+  static async fromProject(projectRoot: string): Promise<CemRegistry> {
+    const reg = new CemRegistry(resolve(projectRoot));
+    const discovered = await discoverPackages(reg.projectRoot!);
+    for (const d of discovered) reg.known.set(d.name, d);
+    return reg;
+  }
+
+  packageNames(): string[] {
+    return Array.from(this.known.keys()).sort();
+  }
+
+  packagesMeta(): DiscoveredPackage[] {
+    return Array.from(this.known.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  has(name: string): boolean {
+    return this.known.has(name);
+  }
+
+  // Lazy load — only parse a package's CEM the first time it's asked for.
+  async get(name: string): Promise<LoadedPackage> {
+    const cached = this.packages.get(name);
+    if (cached) return cached;
+    const meta = this.known.get(name);
+    if (!meta) {
+      throw new Error(
+        `Unknown package '${name}'. Available: ${this.packageNames().join(", ") || "(none)"}`,
+      );
+    }
+    const manifest = await loadManifest(meta.cemPath);
+    const loaded = indexManifest(meta, manifest);
+    this.packages.set(name, loaded);
+    return loaded;
+  }
+
+  // Test/script helper: register a package manually (skipping discovery).
+  registerManual(name: string, cemPath: string, version?: string): void {
+    this.known.set(name, { name, version, packageDir: "", cemPath: resolve(cemPath) });
+  }
 }
 
 export interface SearchHit {
@@ -112,41 +182,29 @@ export interface SearchHit {
   reasons: string[];
 }
 
-// Tag names use kebab-case (e.g. `calcite-date-picker`). Splitting on `-` lets
-// us reward a query token that matches a whole word in the tag, not just a
-// substring — so `"button"` outranks `"button-group"` for the term `"button"`.
-function tagWords(tag: string): string[] {
-  return tag.split("-").filter(Boolean);
-}
-
-// Score-based fuzzy search across the fields that matter for LLM lookup:
-// tag name, summary/description, attributes, slots, events, CSS properties/parts.
-// Ranking prefers exact tag matches, then whole-word tag matches, then substrings.
-export function searchElements(cem: LoadedCem, query: string, limit = 20): SearchHit[] {
+// Fuzzy-search a package. Combines the pre-indexed tag matcher with substring
+// scoring over description / attributes / events / slots / CSS vars so a query
+// like "color" still surfaces components whose tag doesn't include the word but
+// whose docs do.
+export function searchElements(pkg: LoadedPackage, query: string, limit = 20): SearchHit[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
+
+  const tagHits = fuzzySearchTags(pkg.index, query, pkg.elements.length);
+  const byTag = new Map<string, FuzzyMatch>();
+  for (const h of tagHits) byTag.set(h.decl.tagName!.toLowerCase(), h);
 
   const tokens = q.split(/\s+/).filter(Boolean);
   const hits: SearchHit[] = [];
 
-  for (const decl of cem.elements) {
-    const tag = (decl.tagName ?? "").toLowerCase();
-    const words = tagWords(tag);
+  for (const decl of pkg.elements) {
+    const tag = decl.tagName!.toLowerCase();
     const summary = (decl.summary ?? decl.description ?? "").toLowerCase();
-    let score = 0;
-    const reasons: string[] = [];
+    const tagMatch = byTag.get(tag);
+    let score = tagMatch?.score ?? 0;
+    const reasons: string[] = tagMatch ? [...tagMatch.reasons] : [];
 
     for (const t of tokens) {
-      if (tag === t) {
-        score += 100;
-        reasons.push(`tag exact: ${t}`);
-      } else if (words.includes(t)) {
-        score += 50;
-        reasons.push(`tag word: ${t}`);
-      } else if (tag.includes(t)) {
-        score += 25;
-        reasons.push(`tag contains: ${t}`);
-      }
       if (summary.includes(t)) {
         score += 5;
         reasons.push(`desc contains: ${t}`);
@@ -178,19 +236,9 @@ export function searchElements(cem: LoadedCem, query: string, limit = 20): Searc
       }
     }
 
-    // Bonus when every query token matched somewhere — keeps phrasal queries
-    // ("date picker") above incidental single-word matches.
-    if (tokens.length > 1) {
-      const matchedTokens = new Set<string>();
-      for (const t of tokens) {
-        if (reasons.some((r) => r.endsWith(`: ${t}`) || r.includes(t))) matchedTokens.add(t);
-      }
-      if (matchedTokens.size === tokens.length) score += 10;
-    }
-
     if (score > 0) hits.push({ decl, score, reasons });
   }
 
-  hits.sort((a, b) => b.score - a.score || (a.decl.tagName ?? "").localeCompare(b.decl.tagName ?? ""));
+  hits.sort((a, b) => b.score - a.score || a.decl.tagName!.localeCompare(b.decl.tagName!));
   return hits.slice(0, limit);
 }

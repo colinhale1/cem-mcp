@@ -1,4 +1,5 @@
-import type { CemDeclaration, LoadedCem, SearchHit } from "./cem.js";
+import type { DiscoveredPackage } from "./discovery.js";
+import type { CemDeclaration, LoadedPackage, SearchHit } from "./cem.js";
 
 const firstLine = (s: string | undefined): string =>
   (s ?? "").split(/\r?\n/)[0]?.trim() ?? "";
@@ -6,12 +7,36 @@ const firstLine = (s: string | undefined): string =>
 const truncate = (s: string, n: number): string =>
   s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
 
-export function formatList(cem: LoadedCem): string {
+export function formatPackageList(
+  packages: DiscoveredPackage[],
+  projectRoot: string | null,
+): string {
   const lines: string[] = [];
-  lines.push(`# Components (${cem.elements.length})`);
-  lines.push(`Source: \`${cem.sourcePath}\` · schema ${cem.manifest.schemaVersion}`);
+  lines.push(`# Available packages (${packages.length})`);
+  if (projectRoot) lines.push(`Project: \`${projectRoot}\``);
   lines.push("");
-  const sorted = [...cem.elements].sort((a, b) =>
+  if (packages.length === 0) {
+    lines.push("_No packages with a Custom Elements Manifest found in `node_modules`._");
+    lines.push("");
+    lines.push("Try installing a web-components library (e.g. `@esri/calcite-components`) or pointing the server at a different project with `--project`.");
+    return lines.join("\n");
+  }
+  for (const p of packages) {
+    const v = p.version ? `@${p.version}` : "";
+    lines.push(`- \`${p.name}${v}\``);
+  }
+  lines.push("");
+  lines.push("_Call this tool with `package: \"<name>\"` to list its components, or with `package` + `query` to look something up._");
+  return lines.join("\n");
+}
+
+export function formatComponentList(pkg: LoadedPackage): string {
+  const lines: string[] = [];
+  const v = pkg.version ? `@${pkg.version}` : "";
+  lines.push(`# \`${pkg.name}${v}\` — ${pkg.elements.length} components`);
+  lines.push(`Source: \`${pkg.cemPath}\` · schema ${pkg.manifest.schemaVersion}`);
+  lines.push("");
+  const sorted = [...pkg.elements].sort((a, b) =>
     (a.tagName ?? "").localeCompare(b.tagName ?? ""),
   );
   for (const decl of sorted) {
@@ -19,13 +44,13 @@ export function formatList(cem: LoadedCem): string {
     lines.push(`- \`${decl.tagName}\`${summary ? ` — ${truncate(summary, 140)}` : ""}`);
   }
   lines.push("");
-  lines.push("_Call this tool with an exact tag name for full docs, or any term to search._");
+  lines.push("_Call this tool with an exact tag name as `query` for full docs, or any term to fuzzy-search._");
   return lines.join("\n");
 }
 
-export function formatElement(decl: CemDeclaration): string {
+export function formatElement(decl: CemDeclaration, packageName?: string): string {
   const lines: string[] = [];
-  lines.push(`# \`${decl.tagName}\``);
+  lines.push(`# \`${decl.tagName}\`${packageName ? ` _(${packageName})_` : ""}`);
   if (decl.name && decl.name !== decl.tagName) lines.push(`Class: \`${decl.name}\``);
   if (decl.superclass?.name) lines.push(`Extends: \`${decl.superclass.name}\``);
   lines.push("");
@@ -120,11 +145,9 @@ export interface MultiSection {
   body: string;
 }
 
-// Concatenate per-query results with a clear, agent-readable separator that
-// doesn't collide with the `#` / `##` headings inside each section.
-export function formatMulti(sections: MultiSection[]): string {
+export function formatMulti(packageName: string, sections: MultiSection[]): string {
   const lines: string[] = [];
-  lines.push(`# Multi-query (${sections.length})`);
+  lines.push(`# Multi-query: \`${packageName}\` (${sections.length})`);
   lines.push(`Queries: ${sections.map((s) => `\`${s.query}\``).join(", ")}`);
   lines.push("");
   sections.forEach((s, i) => {
@@ -140,12 +163,12 @@ export function formatMulti(sections: MultiSection[]): string {
   return lines.join("\n");
 }
 
-export function formatSearch(query: string, hits: SearchHit[]): string {
+export function formatSearch(packageName: string, query: string, hits: SearchHit[]): string {
   if (hits.length === 0) {
-    return `No components matched \`${query}\`. Try a different term or call with "all" to list everything.`;
+    return `No components in \`${packageName}\` matched \`${query}\`. Try a different term, or call with just \`package\` to list everything.`;
   }
   const lines: string[] = [];
-  lines.push(`# Search: \`${query}\` (${hits.length} match${hits.length === 1 ? "" : "es"})`);
+  lines.push(`# Search \`${packageName}\`: \`${query}\` (${hits.length} match${hits.length === 1 ? "" : "es"})`);
   lines.push("");
   for (const hit of hits) {
     const summary = firstLine(hit.decl.summary ?? hit.decl.description);
