@@ -8,7 +8,7 @@ import {
 import { z } from "zod";
 
 import { loadCem, searchElements, type LoadedCem } from "./cem.js";
-import { formatElement, formatList, formatSearch } from "./format.js";
+import { formatElement, formatList, formatMulti, formatSearch } from "./format.js";
 
 function resolveCemPath(): string {
   const fromFlag = process.argv.find((a) => a.startsWith("--cem="))?.slice("--cem=".length);
@@ -23,13 +23,16 @@ function resolveCemPath(): string {
   return path;
 }
 
+const QUERY_DESCRIPTION =
+  'A single query string, or an array of query strings for multi-lookup in one call. ' +
+  'Each query is dispatched independently: "all" lists every component; an exact tag name ' +
+  '(e.g. "calcite-button", case-insensitive) returns full docs; any other term performs a ' +
+  'ranked fuzzy search across tag names, descriptions, attributes, events, slots, and CSS variables.';
+
 const ToolInput = z.object({
   query: z
-    .string()
-    .min(1)
-    .describe(
-      'Either "all" to list every component, an exact tag name (e.g. "calcite-button") for full docs, or any term/phrase to search across components.',
-    ),
+    .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
+    .describe(QUERY_DESCRIPTION),
 });
 
 const TOOL_NAME = "get_component_docs";
@@ -37,10 +40,13 @@ const TOOL_NAME = "get_component_docs";
 const TOOL_DESCRIPTION = [
   "Look up repo-accurate web component documentation from the loaded Custom Elements Manifest.",
   "",
-  "Dispatch by `query`:",
+  "Pass `query` as a string for a single lookup, or as an array of strings to look up several",
+  "things in one call. Each query is dispatched independently:",
   '- `"all"` → markdown list of every component with a one-line summary.',
   "- exact tag name (case-insensitive) → full docs: attributes, properties, methods, events, slots, CSS custom properties, CSS shadow parts.",
-  "- any other term/phrase → ranked search across tag names, descriptions, attributes, events, slots, and CSS variables.",
+  "- any other term/phrase → ranked fuzzy search across tag names, descriptions, attributes, events, slots, and CSS variables.",
+  "",
+  'Examples: `query: "calcite-button"` · `query: ["calcite-button", "alert", "date picker"]`.',
 ].join("\n");
 
 function handleQuery(cem: LoadedCem, rawQuery: string): string {
@@ -62,6 +68,12 @@ function handleQuery(cem: LoadedCem, rawQuery: string): string {
   return formatSearch(query, hits);
 }
 
+function handleQueries(cem: LoadedCem, queries: string[]): string {
+  if (queries.length === 1) return handleQuery(cem, queries[0]);
+  const sections = queries.map((q) => ({ query: q, body: handleQuery(cem, q) }));
+  return formatMulti(sections);
+}
+
 async function main(): Promise<void> {
   const cemPath = resolveCemPath();
   const cem = await loadCem(cemPath);
@@ -80,8 +92,15 @@ async function main(): Promise<void> {
           type: "object",
           properties: {
             query: {
-              type: "string",
-              description: ToolInput.shape.query.description,
+              description: QUERY_DESCRIPTION,
+              oneOf: [
+                { type: "string", minLength: 1 },
+                {
+                  type: "array",
+                  items: { type: "string", minLength: 1 },
+                  minItems: 1,
+                },
+              ],
             },
           },
           required: ["query"],
@@ -106,7 +125,10 @@ async function main(): Promise<void> {
       };
     }
     try {
-      const text = handleQuery(cem, parsed.data.query);
+      const queries = Array.isArray(parsed.data.query)
+        ? parsed.data.query
+        : [parsed.data.query];
+      const text = handleQueries(cem, queries);
       return { content: [{ type: "text", text }] };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

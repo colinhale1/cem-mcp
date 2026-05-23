@@ -115,6 +115,31 @@ export function formatElement(decl: CemDeclaration): string {
   return lines.join("\n").trimEnd();
 }
 
+export interface MultiSection {
+  query: string;
+  body: string;
+}
+
+// Concatenate per-query results with a clear, agent-readable separator that
+// doesn't collide with the `#` / `##` headings inside each section.
+export function formatMulti(sections: MultiSection[]): string {
+  const lines: string[] = [];
+  lines.push(`# Multi-query (${sections.length})`);
+  lines.push(`Queries: ${sections.map((s) => `\`${s.query}\``).join(", ")}`);
+  lines.push("");
+  sections.forEach((s, i) => {
+    if (i > 0) {
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    }
+    lines.push(`=== Result for: \`${s.query}\` ===`);
+    lines.push("");
+    lines.push(s.body);
+  });
+  return lines.join("\n");
+}
+
 export function formatSearch(query: string, hits: SearchHit[]): string {
   if (hits.length === 0) {
     return `No components matched \`${query}\`. Try a different term or call with "all" to list everything.`;

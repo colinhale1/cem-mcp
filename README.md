@@ -45,13 +45,19 @@ npm run dev -- --cem ./path/to/custom-elements.json
 
 ## The tool
 
-A single tool, `get_component_docs(query: string)`:
+A single tool, `get_component_docs(query)`. `query` is either a string or an array of strings.
+
+**Per-query dispatch:**
 
 | `query` value | Result |
 | --- | --- |
 | `"all"` | Markdown list of every component with a one-line summary. |
 | Exact tag name, e.g. `"calcite-button"` (case-insensitive) | Full docs: attributes, properties, methods, events, slots, CSS vars, CSS parts. |
 | Any other term | Ranked fuzzy search across tag names, descriptions, attributes, events, slots, CSS vars. A single match returns full docs directly. |
+
+**Ranking** prefers exact tag matches, then whole-word matches in the kebab-cased tag (so `"button"` ranks `calcite-button` above `calcite-radio-button`), then substring matches. Multi-token queries get a bonus when every token lands somewhere.
+
+**Multi-query:** pass an array to look up several things in one call — each query is dispatched independently and the results are concatenated with section markers, so an agent can ask for `["calcite-button", "alert", "date picker"]` and get all three back.
 
 ## Try it with Calcite 5
 

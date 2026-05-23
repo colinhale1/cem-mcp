@@ -112,8 +112,16 @@ export interface SearchHit {
   reasons: string[];
 }
 
-// Score-based substring search across the fields that matter for LLM lookup:
+// Tag names use kebab-case (e.g. `calcite-date-picker`). Splitting on `-` lets
+// us reward a query token that matches a whole word in the tag, not just a
+// substring — so `"button"` outranks `"button-group"` for the term `"button"`.
+function tagWords(tag: string): string[] {
+  return tag.split("-").filter(Boolean);
+}
+
+// Score-based fuzzy search across the fields that matter for LLM lookup:
 // tag name, summary/description, attributes, slots, events, CSS properties/parts.
+// Ranking prefers exact tag matches, then whole-word tag matches, then substrings.
 export function searchElements(cem: LoadedCem, query: string, limit = 20): SearchHit[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -123,6 +131,7 @@ export function searchElements(cem: LoadedCem, query: string, limit = 20): Searc
 
   for (const decl of cem.elements) {
     const tag = (decl.tagName ?? "").toLowerCase();
+    const words = tagWords(tag);
     const summary = (decl.summary ?? decl.description ?? "").toLowerCase();
     let score = 0;
     const reasons: string[] = [];
@@ -131,8 +140,11 @@ export function searchElements(cem: LoadedCem, query: string, limit = 20): Searc
       if (tag === t) {
         score += 100;
         reasons.push(`tag exact: ${t}`);
+      } else if (words.includes(t)) {
+        score += 50;
+        reasons.push(`tag word: ${t}`);
       } else if (tag.includes(t)) {
-        score += 30;
+        score += 25;
         reasons.push(`tag contains: ${t}`);
       }
       if (summary.includes(t)) {
@@ -164,6 +176,16 @@ export function searchElements(cem: LoadedCem, query: string, limit = 20): Searc
         score += 2;
         reasons.push(`css part: ${partHit.name}`);
       }
+    }
+
+    // Bonus when every query token matched somewhere — keeps phrasal queries
+    // ("date picker") above incidental single-word matches.
+    if (tokens.length > 1) {
+      const matchedTokens = new Set<string>();
+      for (const t of tokens) {
+        if (reasons.some((r) => r.endsWith(`: ${t}`) || r.includes(t))) matchedTokens.add(t);
+      }
+      if (matchedTokens.size === tokens.length) score += 10;
     }
 
     if (score > 0) hits.push({ decl, score, reasons });
