@@ -1,0 +1,13 @@
+# Normalize line endings — keeps Windows contributors from accidentally
+# committing CRLF and breaking diffs / Node ESM shebang parsing.
+* text=auto eol=lf
+
+# Always shell scripts as LF.
+*.sh text eol=lf
+
+# Treat compiled / binary artifacts as binary.
+*.tgz binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary

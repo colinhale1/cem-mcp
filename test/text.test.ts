@@ -38,20 +38,17 @@ describe("stem", () => {
 
 describe("tokenize", () => {
   it("lowercases, drops short tokens, drops stopwords", () => {
-    assert.deepEqual(
-      tokenize("Shows a temporary toast notification to the user"),
-      ["temporary", "toast", "notification", "user"],
-    );
+    assert.deepEqual(tokenize("Shows a temporary toast notification to the user"), [
+      "temporary",
+      "toast",
+      "notification",
+      "user",
+    ]);
   });
 
   it("splits camelCase and PascalCase boundaries", () => {
     // "on" is dropped as a stopword after the camelCase split.
-    assert.deepEqual(tokenize("onValueChange DatePicker"), [
-      "value",
-      "change",
-      "date",
-      "picker",
-    ]);
+    assert.deepEqual(tokenize("onValueChange DatePicker"), ["value", "change", "date", "picker"]);
   });
 
   it("splits on punctuation, dashes, underscores, and HTML brackets", () => {

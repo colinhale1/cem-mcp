@@ -30,7 +30,9 @@ const dryRunRaw = execFileSync("npm", ["pack", "--dry-run", "--json"], {
 const dryRun = JSON.parse(dryRunRaw);
 const entry = Array.isArray(dryRun) ? dryRun[0] : dryRun;
 const fileSet = new Set(entry.files.map((f) => f.path));
-console.log(`Tarball would ship ${entry.files.length} files (${(entry.size / 1024).toFixed(1)} KB).\n`);
+console.log(
+  `Tarball would ship ${entry.files.length} files (${(entry.size / 1024).toFixed(1)} KB).\n`,
+);
 
 // 2. Required top-level files.
 for (const f of ["package.json", "README.md", "LICENSE", "CHANGELOG.md"]) {

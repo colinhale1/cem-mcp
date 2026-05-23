@@ -7,10 +7,10 @@
 // summary per package so it's obvious which libraries are in the bench set.
 
 import { mkdir, writeFile, rm, copyFile, readFile, stat } from "node:fs/promises";
-import { execFileSync, execFile } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve, join } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -43,15 +43,6 @@ const FALLBACK_CEM_PATHS = [
   "dist/docs/api.json",
 ];
 
-async function exists(p) {
-  try {
-    await stat(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function readJson(p) {
   try {
     return JSON.parse(await readFile(p, "utf8"));
@@ -76,7 +67,9 @@ function packToWork(spec) {
 function rmSyncSafe(p) {
   try {
     execFileSync("rm", ["-rf", p]);
-  } catch {}
+  } catch {
+    // Best-effort cleanup; missing directory is fine.
+  }
 }
 
 function mkdirSync(p) {
@@ -132,14 +125,8 @@ async function extractAndPlace(spec) {
   const targetDir = resolve(NM, pkg.name);
   rmSyncSafe(targetDir);
   await mkdir(resolve(targetDir, dirname(manifestRel)), { recursive: true });
-  await copyFile(
-    resolve(workDir, "package/package.json"),
-    resolve(targetDir, "package.json"),
-  );
-  await copyFile(
-    resolve(workDir, "package", manifestRel),
-    resolve(targetDir, manifestRel),
-  );
+  await copyFile(resolve(workDir, "package/package.json"), resolve(targetDir, "package.json"));
+  await copyFile(resolve(workDir, "package", manifestRel), resolve(targetDir, manifestRel));
 
   const size = (await stat(resolve(targetDir, manifestRel))).size;
   return { name: pkg.name, version: pkg.version, ok: true, manifestRel, size };

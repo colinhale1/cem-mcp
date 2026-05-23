@@ -82,9 +82,7 @@ async function loadPackage(): Promise<LoadedPackage> {
 }
 
 function runCustom(pkg: LoadedPackage, query: string): string[] {
-  return fuzzySearchTags(pkg.index, query, pkg.elements.length).map(
-    (h) => h.decl.tagName!,
-  );
+  return fuzzySearchTags(pkg.index, query, pkg.elements.length).map((h) => h.decl.tagName!);
 }
 
 function runFuzzysort(pkg: LoadedPackage, query: string): string[] {
@@ -133,7 +131,13 @@ async function main(): Promise<void> {
     const fuzzTags = runFuzzysort(pkg, c.query);
     const cr = rankOf(custTags, c.expect);
     const fr = rankOf(fuzzTags, c.expect);
-    rows.push({ query: c.query, expect: c.expect, note: c.note, customRank: cr, fuzzysortRank: fr });
+    rows.push({
+      query: c.query,
+      expect: c.expect,
+      note: c.note,
+      customRank: cr,
+      fuzzysortRank: fr,
+    });
     if (cr === 1) cust1++;
     if (cr <= 3) cust3++;
     if (fr === 1) fuzz1++;
@@ -147,8 +151,7 @@ async function main(): Promise<void> {
 
   console.log("Per-query ranks (lower is better, 9999 = not in results):\n");
   console.log(
-    "  " +
-      ["query".padEnd(22), "expected".padEnd(26), "custom", "fuzzysort", "note"].join("  "),
+    "  " + ["query".padEnd(22), "expected".padEnd(26), "custom", "fuzzysort", "note"].join("  "),
   );
   for (const r of rows) {
     const mark = (rank: number) => (rank === 1 ? "✓" : rank <= 3 ? "·" : "✗");
@@ -168,8 +171,12 @@ async function main(): Promise<void> {
     (rs.reduce((a, b) => a + (b === 9999 ? 50 : b), 0) / rs.length).toFixed(2);
 
   console.log("\nQuality:");
-  console.log(`  custom    top-1=${fmt(cust1, n)}  top-3=${fmt(cust3, n)}  mean-rank=${meanRank(custRanks)}`);
-  console.log(`  fuzzysort top-1=${fmt(fuzz1, n)}  top-3=${fmt(fuzz3, n)}  mean-rank=${meanRank(fuzzRanks)}`);
+  console.log(
+    `  custom    top-1=${fmt(cust1, n)}  top-3=${fmt(cust3, n)}  mean-rank=${meanRank(custRanks)}`,
+  );
+  console.log(
+    `  fuzzysort top-1=${fmt(fuzz1, n)}  top-3=${fmt(fuzz3, n)}  mean-rank=${meanRank(fuzzRanks)}`,
+  );
 
   // Latency: amortize over all cases.
   const iters = 200;
@@ -180,8 +187,12 @@ async function main(): Promise<void> {
     for (const c of CASES) runFuzzysort(pkg, c.query);
   }, iters);
   console.log("\nLatency (median over " + iters + " iters, all cases per iter):");
-  console.log(`  custom    ${tCustom.toFixed(3)} ms  (${(tCustom / CASES.length).toFixed(3)} ms/query)`);
-  console.log(`  fuzzysort ${tFuzz.toFixed(3)} ms  (${(tFuzz / CASES.length).toFixed(3)} ms/query)`);
+  console.log(
+    `  custom    ${tCustom.toFixed(3)} ms  (${(tCustom / CASES.length).toFixed(3)} ms/query)`,
+  );
+  console.log(
+    `  fuzzysort ${tFuzz.toFixed(3)} ms  (${(tFuzz / CASES.length).toFixed(3)} ms/query)`,
+  );
 }
 
 main().catch((err) => {

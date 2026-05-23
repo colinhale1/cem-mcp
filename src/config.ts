@@ -98,7 +98,9 @@ export async function loadConfig(
   try {
     raw = JSON.parse(await readFile(path, "utf8"));
   } catch (err) {
-    throw new Error(`Failed to parse ${path}: ${err instanceof Error ? err.message : err}`);
+    throw new Error(`Failed to parse ${path}: ${err instanceof Error ? err.message : err}`, {
+      cause: err,
+    });
   }
   const parsed = ConfigSchema.safeParse(raw);
   if (!parsed.success) {
@@ -114,7 +116,5 @@ export function applyPackageFilter(
   if (!filter) return names;
   const include = filter.include;
   const exclude = new Set(filter.exclude ?? []);
-  return names
-    .filter((n) => (include ? include.includes(n) : true))
-    .filter((n) => !exclude.has(n));
+  return names.filter((n) => (include ? include.includes(n) : true)).filter((n) => !exclude.has(n));
 }

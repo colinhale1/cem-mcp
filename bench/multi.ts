@@ -117,7 +117,8 @@ function bumpKind(t: Tally, kind: CaseKind, cust: boolean, fuzz: boolean): void 
 
 const pad = (s: string, n: number) => s.padEnd(n);
 const padN = (n: number, w: number) => String(n).padStart(w);
-const pct = (n: number, d: number) => (d === 0 ? "  —  " : `${((n / d) * 100).toFixed(0).padStart(3)}%`);
+const pct = (n: number, d: number) =>
+  d === 0 ? "  —  " : `${((n / d) * 100).toFixed(0).padStart(3)}%`;
 
 async function main(): Promise<void> {
   if (!existsSync(PROJECT)) {
@@ -172,8 +173,16 @@ async function main(): Promise<void> {
   }
 
   // Per-library summary
-  console.log(pad("library", 36) + pad("comps", 7) + pad("prefix", 12) + pad("cases", 7) +
-    pad("cust top1", 11) + pad("cust top3", 11) + pad("fuzz top1", 11) + "fuzz top3");
+  console.log(
+    pad("library", 36) +
+      pad("comps", 7) +
+      pad("prefix", 12) +
+      pad("cases", 7) +
+      pad("cust top1", 11) +
+      pad("cust top3", 11) +
+      pad("fuzz top1", 11) +
+      "fuzz top3",
+  );
   console.log("-".repeat(102));
   for (const { name, tally, pkg } of perLib) {
     console.log(
@@ -184,7 +193,8 @@ async function main(): Promise<void> {
         pad(pct(tally.cust1, tally.total) + ` (${tally.cust1})`, 11) +
         pad(pct(tally.cust3, tally.total) + ` (${tally.cust3})`, 11) +
         pad(pct(tally.fuzz1, tally.total) + ` (${tally.fuzz1})`, 11) +
-        pct(tally.fuzz3, tally.total) + ` (${tally.fuzz3})`,
+        pct(tally.fuzz3, tally.total) +
+        ` (${tally.fuzz3})`,
     );
   }
   console.log("-".repeat(102));
@@ -196,7 +206,8 @@ async function main(): Promise<void> {
       pad(pct(overall.cust1, overall.total) + ` (${overall.cust1})`, 11) +
       pad(pct(overall.cust3, overall.total) + ` (${overall.cust3})`, 11) +
       pad(pct(overall.fuzz1, overall.total) + ` (${overall.fuzz1})`, 11) +
-      pct(overall.fuzz3, overall.total) + ` (${overall.fuzz3})`,
+      pct(overall.fuzz3, overall.total) +
+      ` (${overall.fuzz3})`,
   );
 
   // By query kind
@@ -217,8 +228,7 @@ async function main(): Promise<void> {
     if (misses.length === 0) continue;
     console.log(`\n  ${name}:`);
     for (const m of misses) {
-      const note =
-        m.cr === 9999 ? "not found" : m.cr <= 3 ? `rank ${m.cr}` : `rank ${m.cr} (deep)`;
+      const note = m.cr === 9999 ? "not found" : m.cr <= 3 ? `rank ${m.cr}` : `rank ${m.cr} (deep)`;
       console.log(
         `    [${m.kind}] "${m.query}" → expected "${m.expect}" · custom: ${note} · fuzzysort rank ${m.fr === 9999 ? "—" : m.fr}`,
       );

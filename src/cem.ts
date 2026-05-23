@@ -1,12 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import {
-  builtinAdapters,
-  selectAdapters,
-  findAdapter,
-  type CemAdapter,
-} from "./adapters/index.js";
+import { builtinAdapters, selectAdapters, findAdapter, type CemAdapter } from "./adapters/index.js";
 import { buildBm25Index, scoreBm25, type Bm25Index } from "./bm25.js";
 import { applyPackageFilter, loadConfig, type ResolvedConfig } from "./config.js";
 import { buildIndex, fuzzySearchTags, type FuzzyMatch, type TagIndex } from "./fuzzy.js";

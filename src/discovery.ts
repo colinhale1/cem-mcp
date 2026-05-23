@@ -39,9 +39,9 @@ async function resolveCemForPackage(
   packageDir: string,
   adapters: ReadonlyArray<CemAdapter>,
 ): Promise<{ cemPath: string; adapter: CemAdapter } | null> {
-  const pkgJson = (await readJsonIfExists(join(packageDir, "package.json"))) as
-    | { customElements?: string }
-    | null;
+  const pkgJson = (await readJsonIfExists(join(packageDir, "package.json"))) as {
+    customElements?: string;
+  } | null;
 
   const candidates: string[] = [];
   if (pkgJson && typeof pkgJson.customElements === "string") {
@@ -64,9 +64,10 @@ async function resolveCemForPackage(
 async function readPackageMeta(
   packageDir: string,
 ): Promise<{ name: string; version?: string } | null> {
-  const pkg = (await readJsonIfExists(join(packageDir, "package.json"))) as
-    | { name?: string; version?: string }
-    | null;
+  const pkg = (await readJsonIfExists(join(packageDir, "package.json"))) as {
+    name?: string;
+    version?: string;
+  } | null;
   if (!pkg || typeof pkg.name !== "string") return null;
   return { name: pkg.name, version: typeof pkg.version === "string" ? pkg.version : undefined };
 }

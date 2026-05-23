@@ -5,7 +5,7 @@
 [![Node ≥ 18](https://img.shields.io/node/v/cem-mcp)](https://nodejs.org)
 [![MIT](https://img.shields.io/npm/l/cem-mcp.svg)](LICENSE)
 
-**Stop your AI assistant from hallucinating web-component props.** `cem-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server that hands a coding agent the *actual* documentation of the web components your project depends on — attributes, properties, methods, events, slots, CSS vars, and CSS parts — by reading the [Custom Elements Manifest](https://github.com/webcomponents/custom-elements-manifest) shipped inside each library in `node_modules`.
+**Stop your AI assistant from hallucinating web-component props.** `cem-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server that hands a coding agent the _actual_ documentation of the web components your project depends on — attributes, properties, methods, events, slots, CSS vars, and CSS parts — by reading the [Custom Elements Manifest](https://github.com/webcomponents/custom-elements-manifest) shipped inside each library in `node_modules`.
 
 No description-scraping, no out-of-date docs, no made-up prop names. If the library publishes a CEM, the agent gets the truth.
 
@@ -24,9 +24,9 @@ Add to your MCP client config (one of [Claude Code, Claude Desktop, Cursor, Wind
   "mcpServers": {
     "cem": {
       "command": "cem-mcp",
-      "env": { "CEM_PROJECT": "/abs/path/to/your/project" }
-    }
-  }
+      "env": { "CEM_PROJECT": "/abs/path/to/your/project" },
+    },
+  },
 }
 ```
 
@@ -41,16 +41,16 @@ Now the agent has a `get_component_docs` tool that resolves natural-language que
 
 ## Wire it into your agent
 
-| Client | Config file | Snippet |
-| --- | --- | --- |
-| [Claude Code](examples/claude-code.json) | `~/.claude.json` or `claude mcp add cem -- npx -y cem-mcp` | `mcpServers` |
-| [Claude Desktop](examples/claude-desktop.json) | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) <br/> `%APPDATA%\Claude\claude_desktop_config.json` (Win) | `mcpServers` |
-| [Cursor](examples/cursor.json) | `~/.cursor/mcp.json` or `.cursor/mcp.json` | `mcpServers` |
-| [Windsurf](examples/windsurf.json) | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` |
-| [VS Code](examples/vscode.json) | `.vscode/mcp.json` | `servers` _(different key)_ |
-| [Zed](examples/zed.json) | `~/.config/zed/settings.json` | `context_servers` _(different key)_ |
-| [Continue](examples/continue.yaml) | `~/.continue/config.yaml` | `mcpServers` _(YAML)_ |
-| [Cline](examples/cline.json) | Cline MCP settings | `mcpServers` |
+| Client                                         | Config file                                                                                                                         | Snippet                             |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| [Claude Code](examples/claude-code.json)       | `~/.claude.json` or `claude mcp add cem -- npx -y cem-mcp`                                                                          | `mcpServers`                        |
+| [Claude Desktop](examples/claude-desktop.json) | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) <br/> `%APPDATA%\Claude\claude_desktop_config.json` (Win) | `mcpServers`                        |
+| [Cursor](examples/cursor.json)                 | `~/.cursor/mcp.json` or `.cursor/mcp.json`                                                                                          | `mcpServers`                        |
+| [Windsurf](examples/windsurf.json)             | `~/.codeium/windsurf/mcp_config.json`                                                                                               | `mcpServers`                        |
+| [VS Code](examples/vscode.json)                | `.vscode/mcp.json`                                                                                                                  | `servers` _(different key)_         |
+| [Zed](examples/zed.json)                       | `~/.config/zed/settings.json`                                                                                                       | `context_servers` _(different key)_ |
+| [Continue](examples/continue.yaml)             | `~/.continue/config.yaml`                                                                                                           | `mcpServers` _(YAML)_               |
+| [Cline](examples/cline.json)                   | Cline MCP settings                                                                                                                  | `mcpServers`                        |
 
 All examples are in [`examples/`](examples/) with the literal JSON ready to copy. The README there has client-specific notes.
 
@@ -60,24 +60,24 @@ All examples are in [`examples/`](examples/) with the literal JSON ready to copy
 
 One MCP tool, `get_component_docs(package?, query?)`. Both parameters optional:
 
-| `package` | `query` | Result |
-| --- | --- | --- |
-| _omitted_ | _any_ | List every discovered package |
-| set | _omitted_ or `"all"` | List every component in that package |
-| set | exact tag (case-insensitive) | Full docs |
-| set | any term | Ranked search — fuzzy + BM25 + synonym-aware. Clear-winner hit returns full docs; otherwise a ranked list |
-| set | `string[]` | Multi-query — each item dispatched independently, results joined |
+| `package` | `query`                      | Result                                                                                                    |
+| --------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| _omitted_ | _any_                        | List every discovered package                                                                             |
+| set       | _omitted_ or `"all"`         | List every component in that package                                                                      |
+| set       | exact tag (case-insensitive) | Full docs                                                                                                 |
+| set       | any term                     | Ranked search — fuzzy + BM25 + synonym-aware. Clear-winner hit returns full docs; otherwise a ranked list |
+| set       | `string[]`                   | Multi-query — each item dispatched independently, results joined                                          |
 
 If the agent asks for an unknown package, the error includes a **Did you mean?** suggestion.
 
 ### Bench results (44 hand-curated real-world queries, 6 libraries)
 
-| Query kind | Top-1 | Top-3 |
-| --- | --- | --- |
-| Anchored (`"button"`, `"DatePicker"`, `"alrt"`) | **100%** | 100% |
-| Paraphrastic (`"show a temporary toast"`, `"loading spinner"`) | **92%** | 100% |
-| Attribute-anchored (`"scale s m l"`) | **100%** | 100% |
-| **Overall** | **98%** | **100%** |
+| Query kind                                                     | Top-1    | Top-3    |
+| -------------------------------------------------------------- | -------- | -------- |
+| Anchored (`"button"`, `"DatePicker"`, `"alrt"`)                | **100%** | 100%     |
+| Paraphrastic (`"show a temporary toast"`, `"loading spinner"`) | **92%**  | 100%     |
+| Attribute-anchored (`"scale s m l"`)                           | **100%** | 100%     |
+| **Overall**                                                    | **98%**  | **100%** |
 
 For the head-to-head against `fuzzysort` and the full methodology see [`docs/adr-0001-fuzzy-search.md`](docs/adr-0001-fuzzy-search.md).
 
@@ -87,10 +87,10 @@ For the head-to-head against `fuzzysort` and the full methodology see [`docs/adr
 
 `cem-mcp` walks `node_modules` (top-level and `@scoped/*`) in the project root, opens each `package.json`, and registers packages that ship a Custom Elements Manifest. Each candidate file is matched against a chain of **schema adapters**:
 
-| adapter | shape | covers |
-| --- | --- | --- |
-| `cem2` | Standard CEM 2.x (`{ schemaVersion, modules: [...] }`) | Calcite, Shoelace, Patternfly, RHDS, Nord, UI5, Vivid, most Lit libs |
-| `carbon-html-data` | VS Code HTML custom-data (`{ version, tags: [...] }`) | `@carbon/web-components`, `@cds/core` |
+| adapter            | shape                                                  | covers                                                               |
+| ------------------ | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| `cem2`             | Standard CEM 2.x (`{ schemaVersion, modules: [...] }`) | Calcite, Shoelace, Patternfly, RHDS, Nord, UI5, Vivid, most Lit libs |
+| `carbon-html-data` | VS Code HTML custom-data (`{ version, tags: [...] }`)  | `@carbon/web-components`, `@cds/core`                                |
 
 Fallback paths checked when `customElements` isn't declared in `package.json`: `custom-elements.json`, `dist/custom-elements.json`, `dist/docs/custom-elements.json`, `dist/docs/api.json`.
 
@@ -113,16 +113,16 @@ Drop a `cem.config.json` in the project root (or pass `--config <path>`). Everyt
 {
   "packages": {
     "include": ["@esri/calcite-components"],
-    "exclude": ["@some/legacy-lib"]
+    "exclude": ["@some/legacy-lib"],
   },
   "paths": {
-    "@my/elements": "./vendor/my-elements/custom-elements.json"
+    "@my/elements": "./vendor/my-elements/custom-elements.json",
   },
   "adapters": { "disable": ["carbon-html-data"] },
   "synonyms": {
     "extend": { "snackbar": ["alert", "toast"] },
-    "disable": false
-  }
+    "disable": false,
+  },
 }
 ```
 

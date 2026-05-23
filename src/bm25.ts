@@ -69,10 +69,7 @@ export interface WeightedTerm {
   weight: number;
 }
 
-export function scoreBm25(
-  index: Bm25Index,
-  queryTerms: WeightedTerm[],
-): Map<string, number> {
+export function scoreBm25(index: Bm25Index, queryTerms: WeightedTerm[]): Map<string, number> {
   const scores = new Map<string, number>();
   if (index.totalDocs === 0) return scores;
   const avgdl = Math.max(index.avgDocLength, 1);

@@ -38,8 +38,7 @@ const kebabTokens = (tag: string): string[] => tag.split("-").filter(Boolean);
 const toPascal = (tokens: string[]): string =>
   tokens.map((t) => t.charAt(0).toUpperCase() + t.slice(1)).join("");
 
-const acronym = (tokens: string[]): string =>
-  tokens.map((t) => t.charAt(0)).join("");
+const acronym = (tokens: string[]): string => tokens.map((t) => t.charAt(0)).join("");
 
 // Capped Levenshtein distance. Used for typo tolerance on short strings;
 // returns `cap + 1` (any value > cap) as soon as we can prove the answer
@@ -145,11 +144,7 @@ function queryShapes(raw: string): {
   return { lower, flat, tokens };
 }
 
-export function fuzzySearchTags(
-  index: TagIndex[],
-  query: string,
-  limit = 20,
-): FuzzyMatch[] {
+export function fuzzySearchTags(index: TagIndex[], query: string, limit = 20): FuzzyMatch[] {
   const q = queryShapes(query);
   if (!q.lower) return [];
 

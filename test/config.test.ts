@@ -26,9 +26,7 @@ function makePkg(name: string) {
         {
           kind: "javascript-module",
           path: "src/x.ts",
-          declarations: [
-            { kind: "class", name: "X", tagName: `${name.replace(/[@/]/g, "")}-x` },
-          ],
+          declarations: [{ kind: "class", name: "X", tagName: `${name.replace(/[@/]/g, "")}-x` }],
         },
       ],
     },
@@ -62,10 +60,10 @@ describe("config", () => {
   it("applyPackageFilter respects include and exclude", () => {
     const names = ["@a/one", "@a/two", "@b/three"];
     assert.deepEqual(applyPackageFilter(names, undefined), names);
-    assert.deepEqual(
-      applyPackageFilter(names, { include: ["@a/one", "@a/two"] }),
-      ["@a/one", "@a/two"],
-    );
+    assert.deepEqual(applyPackageFilter(names, { include: ["@a/one", "@a/two"] }), [
+      "@a/one",
+      "@a/two",
+    ]);
     assert.deepEqual(applyPackageFilter(names, { exclude: ["@a/two"] }), ["@a/one", "@b/three"]);
     assert.deepEqual(
       applyPackageFilter(names, { include: ["@a/one", "@a/two"], exclude: ["@a/two"] }),

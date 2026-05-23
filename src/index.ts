@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,7 +84,6 @@ TOOL
     - query may be a string OR an array of strings (multi-lookup)
 `;
 
-
 const TOOL_NAME = "get_component_docs";
 
 const TOOL_DESCRIPTION = [
@@ -107,9 +103,7 @@ const TOOL_DESCRIPTION = [
 
 const ToolInput = z.object({
   package: z.string().min(1).optional(),
-  query: z
-    .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
-    .optional(),
+  query: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
 });
 
 // A fuzzy result is "definitive" when its score is high in absolute terms and
@@ -174,10 +168,7 @@ async function main(): Promise<void> {
   const configPath = resolveConfigPath();
   const registry = await CemRegistry.fromProject(projectRoot, { configPath });
 
-  const server = new Server(
-    { name: "cem-mcp", version: "0.3.0" },
-    { capabilities: { tools: {} } },
-  );
+  const server = new Server({ name: "cem-mcp", version: "0.3.0" }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [

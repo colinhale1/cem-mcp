@@ -1,8 +1,4 @@
-import type {
-  CemAttribute,
-  CemDeclaration,
-  CustomElementsManifest,
-} from "../cem.js";
+import type { CemAttribute, CemDeclaration, CustomElementsManifest } from "../cem.js";
 import type { CemAdapter } from "./types.js";
 
 // VS Code HTML custom-data v1.1, as shipped by @carbon/web-components at
@@ -79,9 +75,7 @@ export const carbonHtmlDataAdapter: CemAdapter = {
     }));
     return {
       schemaVersion: "2.1.0",
-      modules: [
-        { kind: "javascript-module", path: sourcePath, declarations },
-      ],
+      modules: [{ kind: "javascript-module", path: sourcePath, declarations }],
     };
   },
 };

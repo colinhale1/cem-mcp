@@ -1,11 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  builtinAdapters,
-  findAdapter,
-  selectAdapters,
-} from "../src/adapters/index.js";
+import { builtinAdapters, findAdapter, selectAdapters } from "../src/adapters/index.js";
 import { cem2Adapter } from "../src/adapters/cem2.js";
 import { carbonHtmlDataAdapter } from "../src/adapters/carbon-html-data.js";
 
@@ -28,10 +24,7 @@ describe("adapters", () => {
   });
 
   it("carbon-html-data refuses files that ALSO have a modules array (claimed by cem2)", () => {
-    assert.equal(
-      carbonHtmlDataAdapter.matches({ version: "1.0", tags: [], modules: [] }),
-      false,
-    );
+    assert.equal(carbonHtmlDataAdapter.matches({ version: "1.0", tags: [], modules: [] }), false);
   });
 
   it("carbon-html-data converts tags + attributes to a CEM declaration", () => {

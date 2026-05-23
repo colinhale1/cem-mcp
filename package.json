@@ -39,21 +39,31 @@
     "fetch-calcite": "node scripts/fetch-calcite-cem.mjs",
     "fetch-libs": "node scripts/fetch-libs.mjs",
     "pack:check": "node scripts/pack-check.mjs",
-    "prepublishOnly": "npm test && npm run build && npm run pack:check"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepublishOnly": "npm run lint && npm run format:check && npm test && npm run build && npm run pack:check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
     "fuzzysort": "^3.1.0",
+    "prettier": "^3.8.3",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.59.4"
   },
   "engines": {
     "node": ">=18"
   },
+  "packageManager": "npm@10.9.7",
   "keywords": [
     "mcp",
     "model-context-protocol",

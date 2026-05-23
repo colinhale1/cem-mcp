@@ -22,7 +22,13 @@ async function fixtureProject(structure: Record<string, unknown>): Promise<strin
   return root;
 }
 
-function lib(decls: Array<{ tag: string; description?: string; attributes?: Array<{ name: string; values?: string[]; description?: string }> }>) {
+function lib(
+  decls: Array<{
+    tag: string;
+    description?: string;
+    attributes?: Array<{ name: string; values?: string[]; description?: string }>;
+  }>,
+) {
   return {
     "node_modules/scoring-lib/package.json": {
       name: "scoring-lib",
@@ -36,16 +42,17 @@ function lib(decls: Array<{ tag: string; description?: string; attributes?: Arra
           path: "src/x.ts",
           declarations: decls.map((d) => ({
             kind: "class",
-            name: d.tag.split("-").map((t) => t[0].toUpperCase() + t.slice(1)).join(""),
+            name: d.tag
+              .split("-")
+              .map((t) => t[0].toUpperCase() + t.slice(1))
+              .join(""),
             tagName: d.tag,
             customElement: true,
             description: d.description,
             attributes: (d.attributes ?? []).map((a) => ({
               name: a.name,
               description: a.description,
-              type: a.values
-                ? { text: a.values.map((v) => `"${v}"`).join(" | ") }
-                : undefined,
+              type: a.values ? { text: a.values.map((v) => `"${v}"`).join(" | ") } : undefined,
             })),
           })),
         },
@@ -67,10 +74,11 @@ describe("attribute index", () => {
     const pkg = await reg.get("scoring-lib");
     assert.equal(pkg.attrIndex.get("scale")?.size, 2);
     assert.equal(pkg.attrIndex.get("color")?.size, 1);
-    assert.deepEqual(
-      Array.from(pkg.attrValuesByTag.get("lib-a")?.get("scale") ?? []).sort(),
-      ["l", "m", "s"],
-    );
+    assert.deepEqual(Array.from(pkg.attrValuesByTag.get("lib-a")?.get("scale") ?? []).sort(), [
+      "l",
+      "m",
+      "s",
+    ]);
   });
 
   it("extracts values from type.text union of quoted strings", async () => {
@@ -79,10 +87,11 @@ describe("attribute index", () => {
     );
     const reg = await CemRegistry.fromProject(root);
     const pkg = await reg.get("scoring-lib");
-    assert.deepEqual(
-      Array.from(pkg.attrValuesByTag.get("lib-x")?.get("size") ?? []).sort(),
-      ["large", "medium", "small"],
-    );
+    assert.deepEqual(Array.from(pkg.attrValuesByTag.get("lib-x")?.get("size") ?? []).sort(), [
+      "large",
+      "medium",
+      "small",
+    ]);
   });
 });
 
@@ -165,8 +174,6 @@ describe("token-to-tag boost", () => {
     const pkg = await reg.get("scoring-lib");
     const hits = searchElements(pkg, "expandable", 5);
     assert.equal(hits[0].decl.tagName, "lib-accordion");
-    assert.ok(
-      hits[0].reasons.some((r) => r.includes("synonym 'accordion' matches tag")),
-    );
+    assert.ok(hits[0].reasons.some((r) => r.includes("synonym 'accordion' matches tag")));
   });
 });

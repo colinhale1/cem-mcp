@@ -1,8 +1,7 @@
 import type { DiscoveredPackage } from "./discovery.js";
 import type { CemDeclaration, LoadedPackage, SearchHit } from "./cem.js";
 
-const firstLine = (s: string | undefined): string =>
-  (s ?? "").split(/\r?\n/)[0]?.trim() ?? "";
+const firstLine = (s: string | undefined): string => (s ?? "").split(/\r?\n/)[0]?.trim() ?? "";
 
 const truncate = (s: string, n: number): string =>
   s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
@@ -44,7 +43,9 @@ export function formatPackageList(
     lines.push(`- \`${p.name}${v}\`${adapter}`);
   }
   lines.push("");
-  lines.push("_Call this tool with `package: \"<name>\"` to list its components, or with `package` + `query` to look something up._");
+  lines.push(
+    '_Call this tool with `package: "<name>"` to list its components, or with `package` + `query` to look something up._',
+  );
   return lines.join("\n");
 }
 
@@ -54,15 +55,15 @@ export function formatComponentList(pkg: LoadedPackage): string {
   lines.push(`# \`${pkg.name}${v}\` — ${pkg.elements.length} components`);
   lines.push(`Source: \`${pkg.cemPath}\` · schema ${pkg.manifest.schemaVersion}`);
   lines.push("");
-  const sorted = [...pkg.elements].sort((a, b) =>
-    (a.tagName ?? "").localeCompare(b.tagName ?? ""),
-  );
+  const sorted = [...pkg.elements].sort((a, b) => (a.tagName ?? "").localeCompare(b.tagName ?? ""));
   for (const decl of sorted) {
     const summary = firstLine(decl.summary ?? decl.description);
     lines.push(`- \`${decl.tagName}\`${summary ? ` — ${truncate(summary, 140)}` : ""}`);
   }
   lines.push("");
-  lines.push("_Call this tool with an exact tag name as `query` for full docs, or any term to fuzzy-search._");
+  lines.push(
+    "_Call this tool with an exact tag name as `query` for full docs, or any term to fuzzy-search._",
+  );
   return lines.join("\n");
 }
 
@@ -87,7 +88,9 @@ export function formatElement(decl: CemDeclaration, packageName?: string): strin
     for (const a of attrs) {
       const type = a.type?.text ? ` \`${a.type.text}\`` : "";
       const def = a.default !== undefined ? ` (default \`${a.default}\`)` : "";
-      lines.push(`- **${a.name}**${type}${def}${a.description ? ` — ${firstLine(a.description)}` : ""}`);
+      lines.push(
+        `- **${a.name}**${type}${def}${a.description ? ` — ${firstLine(a.description)}` : ""}`,
+      );
     }
     lines.push("");
   }
@@ -98,12 +101,16 @@ export function formatElement(decl: CemDeclaration, packageName?: string): strin
     for (const p of props) {
       const type = p.type?.text ? ` \`${p.type.text}\`` : "";
       const def = p.default !== undefined ? ` (default \`${p.default}\`)` : "";
-      lines.push(`- **${p.name}**${type}${def}${p.description ? ` — ${firstLine(p.description)}` : ""}`);
+      lines.push(
+        `- **${p.name}**${type}${def}${p.description ? ` — ${firstLine(p.description)}` : ""}`,
+      );
     }
     lines.push("");
   }
 
-  const methods = (decl.members ?? []).filter((m) => m.kind === "method" && m.privacy !== "private");
+  const methods = (decl.members ?? []).filter(
+    (m) => m.kind === "method" && m.privacy !== "private",
+  );
   if (methods.length) {
     lines.push("## Methods");
     for (const m of methods) {
@@ -111,7 +118,9 @@ export function formatElement(decl: CemDeclaration, packageName?: string): strin
         .map((p) => `${p.name}${p.type?.text ? `: ${p.type.text}` : ""}`)
         .join(", ");
       const ret = m.return?.type?.text ? `: ${m.return.type.text}` : "";
-      lines.push(`- **${m.name}(${params})**${ret}${m.description ? ` — ${firstLine(m.description)}` : ""}`);
+      lines.push(
+        `- **${m.name}(${params})**${ret}${m.description ? ` — ${firstLine(m.description)}` : ""}`,
+      );
     }
     lines.push("");
   }
@@ -186,7 +195,9 @@ export function formatSearch(packageName: string, query: string, hits: SearchHit
     return `No components in \`${packageName}\` matched \`${query}\`. Try a different term, or call with just \`package\` to list everything.`;
   }
   const lines: string[] = [];
-  lines.push(`# Search \`${packageName}\`: \`${query}\` (${hits.length} match${hits.length === 1 ? "" : "es"})`);
+  lines.push(
+    `# Search \`${packageName}\`: \`${query}\` (${hits.length} match${hits.length === 1 ? "" : "es"})`,
+  );
   lines.push("");
   for (const hit of hits) {
     const summary = firstLine(hit.decl.summary ?? hit.decl.description);

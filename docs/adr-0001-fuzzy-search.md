@@ -40,10 +40,10 @@ To keep the comparison apples-to-apples, both matchers search the same surface (
 
 ## Results
 
-| matcher    | top-1            | top-3              | mean rank | median time (per query) |
-| ---------- | ---------------- | ------------------ | --------- | ----------------------- |
-| custom     | **95% (21/22)**  | **100% (22/22)**   | **1.05**  | 0.094 ms                |
-| fuzzysort  | 86% (19/22)      | 95% (21/22)        | 3.36      | **0.009 ms**            |
+| matcher   | top-1           | top-3            | mean rank | median time (per query) |
+| --------- | --------------- | ---------------- | --------- | ----------------------- |
+| custom    | **95% (21/22)** | **100% (22/22)** | **1.05**  | 0.094 ms                |
+| fuzzysort | 86% (19/22)     | 95% (21/22)      | 3.36      | **0.009 ms**            |
 
 Both matchers handle exact tags, single-word queries, phrasal queries, PascalCase, and drop-letter typos cleanly. The differences:
 
@@ -70,33 +70,33 @@ We keep `fuzzysort` as a `devDependency` so `npm run bench` continues to work as
 
 After the initial decision (calcite-only, 22 hand-curated cases) we ran a broader bench across 8 component libraries with auto-generated query sets derived from each library's tag list. See `bench/multi.ts`. For every tag whose prefix-stripped form is unique within its library, we generate six queries: the exact tag, the prefix-stripped tag, PascalCase, concatenated flat, drop-letter typo, insert-letter typo.
 
-| library                       | components | prefix    | cases | custom top-1     | fuzzysort top-1  |
-| ----------------------------- | ---------- | --------- | ----- | ---------------- | ---------------- |
-| @cds/core                     | 68         | `cds`     | 394   | **100%**         | 88%              |
-| @esri/calcite-components      | 105        | `calcite` | 606   | **100%**         | 92%              |
-| @nordhealth/components        | 55         | `nord`    | 322   | **100%**         | 88%              |
-| @patternfly/elements          | 54         | `pf`      | 318   | **100%**         | 84%              |
-| @rhds/elements                | 81         | `rh`      | 464   | **100%**         | 85%              |
-| @shoelace-style/shoelace      | 58         | `sl`      | 336   | **100%**         | 86%              |
-| @ui5/webcomponents            | 105        | `ui5`     | 604   | **100%**         | 84%              |
-| **OVERALL**                   | **526**    |           | 3044  | **100% (3044)**  | **87% (2646)**   |
+| library                  | components | prefix    | cases | custom top-1    | fuzzysort top-1 |
+| ------------------------ | ---------- | --------- | ----- | --------------- | --------------- |
+| @cds/core                | 68         | `cds`     | 394   | **100%**        | 88%             |
+| @esri/calcite-components | 105        | `calcite` | 606   | **100%**        | 92%             |
+| @nordhealth/components   | 55         | `nord`    | 322   | **100%**        | 88%             |
+| @patternfly/elements     | 54         | `pf`      | 318   | **100%**        | 84%             |
+| @rhds/elements           | 81         | `rh`      | 464   | **100%**        | 85%             |
+| @shoelace-style/shoelace | 58         | `sl`      | 336   | **100%**        | 86%             |
+| @ui5/webcomponents       | 105        | `ui5`     | 604   | **100%**        | 84%             |
+| **OVERALL**              | **526**    |           | 3044  | **100% (3044)** | **87% (2646)**  |
 
 By query kind across all libraries:
 
-| kind        | cases | custom top-1 | fuzzysort top-1 |
-| ----------- | ----- | ------------ | --------------- |
-| exact       | 526   | 100%         | 100%            |
-| short       | 526   | 100%         | 100%            |
-| pascal      | 526   | 100%         | 100%            |
-| flat        | 526   | 100%         | 100%            |
-| typo-drop   | 470   | 100%         | 99%             |
-| typo-ins    | 470   | **100%**     | **17%**         |
+| kind      | cases | custom top-1 | fuzzysort top-1 |
+| --------- | ----- | ------------ | --------------- |
+| exact     | 526   | 100%         | 100%            |
+| short     | 526   | 100%         | 100%            |
+| pascal    | 526   | 100%         | 100%            |
+| flat      | 526   | 100%         | 100%            |
+| typo-drop | 470   | 100%         | 99%             |
+| typo-ins  | 470   | **100%**     | **17%**         |
 
 ### What the cross-library bench surfaced
 
 1. **A bug in the edit-distance function.** Our initial Damerau-Levenshtein included a transposition step that read `prev[j-2]` — but with a two-row rolling buffer, `prev` is row `i-1`, while a correct Damerau extension needs row `i-2`. On strings with repeated characters (e.g. `v5progressstepper`), the stale value pulled the answer artificially low — sometimes returning distance 0 for clearly different strings, causing the matcher to silently produce no hits at all. The fix was to drop the transposition step entirely and stick to plain Levenshtein: insertion / deletion / substitution typos are the common cases anyway, and a buggy Damerau is much worse than no Damerau. After the fix, every typo-drop and typo-ins case across all libraries lands at top-1. The original 22-case calcite bench did not exhibit the bug because none of its typo queries hit the repeated-character path.
 
-2. **`tagName` cannot be trusted on its own.** `@vonage/vivid@5.19.0` ships declarations where `tagName` is the *symbol of a constant* holding the real tag (e.g. `VC_HEX_PICKER_TAG`) because the build tool couldn't resolve the reference. We now filter to declarations whose `tagName` matches the HTML custom-element grammar (`[a-z][a-z0-9]*(-[a-z0-9]+)+`). The matcher only sees real tags; broken authoring shows up as a 0-component package rather than as garbage in the index.
+2. **`tagName` cannot be trusted on its own.** `@vonage/vivid@5.19.0` ships declarations where `tagName` is the _symbol of a constant_ holding the real tag (e.g. `VC_HEX_PICKER_TAG`) because the build tool couldn't resolve the reference. We now filter to declarations whose `tagName` matches the HTML custom-element grammar (`[a-z][a-z0-9]*(-[a-z0-9]+)+`). The matcher only sees real tags; broken authoring shows up as a 0-component package rather than as garbage in the index.
 
 3. **A filename is not a schema.** `@carbon/web-components` ships a VS Code HTML custom-data file at `custom-elements.json` — same filename, completely different schema (`{ version, tags }` instead of `{ schemaVersion, modules }`). Discovery now opens each candidate and checks for the CEM 2.x `modules` array before declaring victory.
 
@@ -106,7 +106,7 @@ By query kind across all libraries:
 
 ## Second addendum: paraphrastic queries expose the real ceiling
 
-The first two benches (calcite-only hand-curated, then auto-generated across libraries) both used queries derived from the tag identity itself — exact tags, prefix-stripped names, PascalCase forms, typos of those forms. They measured whether the matcher can resolve queries that look like a tag. They don't measure whether the matcher can resolve queries that describe *intent*.
+The first two benches (calcite-only hand-curated, then auto-generated across libraries) both used queries derived from the tag identity itself — exact tags, prefix-stripped names, PascalCase forms, typos of those forms. They measured whether the matcher can resolve queries that look like a tag. They don't measure whether the matcher can resolve queries that describe _intent_.
 
 `bench/real-world.ts` adds a third bench: 44 hand-curated cases across six libraries, split into three kinds:
 
@@ -116,12 +116,12 @@ The first two benches (calcite-only hand-curated, then auto-generated across lib
 
 Results:
 
-| kind                | cases | custom top-1   | fuzzysort top-1 |
-| ------------------- | ----- | -------------- | --------------- |
-| anchored            | 31    | **100%**       | 97%             |
-| paraphrastic        | 12    | **50%**        | **0%**          |
-| attribute-anchored  | 1     | 0%             | 0%              |
-| **overall**         | **44**| **84%**        | **68%**         |
+| kind               | cases  | custom top-1 | fuzzysort top-1 |
+| ------------------ | ------ | ------------ | --------------- |
+| anchored           | 31     | **100%**     | 97%             |
+| paraphrastic       | 12     | **50%**      | **0%**          |
+| attribute-anchored | 1      | 0%           | 0%              |
+| **overall**        | **44** | **84%**      | **68%**         |
 
 What this says:
 
@@ -137,12 +137,12 @@ The follow-up landed: `src/bm25.ts` (Okapi BM25 with k1=1.5, b=0.75) + `src/text
 
 Real-world bench delta:
 
-| kind                | cases | top-1 before | top-1 after   | Δ        |
-| ------------------- | ----- | ------------ | ------------- | -------- |
-| anchored            | 31    | 100%         | 100%          | —        |
-| paraphrastic        | 12    | 50%          | **58%**       | **+8 pp**|
-| attribute-anchored  | 1     | 0%           | 0%            | —        |
-| **overall**         | 44    | 84%          | **86%**       | **+2 pp**|
+| kind               | cases | top-1 before | top-1 after | Δ         |
+| ------------------ | ----- | ------------ | ----------- | --------- |
+| anchored           | 31    | 100%         | 100%        | —         |
+| paraphrastic       | 12    | 50%          | **58%**     | **+8 pp** |
+| attribute-anchored | 1     | 0%           | 0%          | —         |
+| **overall**        | 44    | 84%          | **86%**     | **+2 pp** |
 
 Top-3 paraphrastic improved more visibly (several "rank deep" misses became rank 2 / 3). Wins of note: `loading spinner → calcite-loader`, `show a temporary notification → sl-alert`, `color picker swatch → sl-color-picker`, `show a banner alert → nord-banner` — all driven by some combination of BM25 picking up multi-word matches across description + attribute text, and the synonym map bridging "notification ↔ alert", "spinner ↔ loader", etc.
 
@@ -169,12 +169,12 @@ Three additions:
 
 Real-world bench delta after this pass:
 
-| kind                | cases | before  | after     | Δ              |
-| ------------------- | ----- | ------- | --------- | -------------- |
-| anchored            | 31    | 100%    | 100%      | —              |
-| paraphrastic        | 12    | 58%     | **92%**   | **+34 pp**     |
-| attribute-anchored  | 1     | 0%      | **100%**  | **+100 pp**    |
-| **overall**         | 44    | 86%     | **98%**   | **+12 pp**     |
+| kind               | cases | before | after    | Δ           |
+| ------------------ | ----- | ------ | -------- | ----------- |
+| anchored           | 31    | 100%   | 100%     | —           |
+| paraphrastic       | 12    | 58%    | **92%**  | **+34 pp**  |
+| attribute-anchored | 1     | 0%     | **100%** | **+100 pp** |
+| **overall**        | 44    | 86%    | **98%**  | **+12 pp**  |
 
 Top-3 overall: **100%**. Every hand-curated case lands in the top-3 results.
 

@@ -8,10 +8,7 @@ export type { CemAdapter } from "./types.js";
 // standard CEM 2.x adapter comes first so a file with both `modules` and any
 // other top-level keys is always treated as a real CEM rather than misread by
 // a more permissive adapter.
-export const builtinAdapters: ReadonlyArray<CemAdapter> = [
-  cem2Adapter,
-  carbonHtmlDataAdapter,
-];
+export const builtinAdapters: ReadonlyArray<CemAdapter> = [cem2Adapter, carbonHtmlDataAdapter];
 
 export function selectAdapters(
   all: ReadonlyArray<CemAdapter>,

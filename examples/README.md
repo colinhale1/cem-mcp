@@ -4,16 +4,16 @@ Copy the snippet for your client into the file it expects. The server
 itself is the same in every case — these are just where each tool wants
 to be told about it.
 
-| Client | Config file | Schema |
-| --- | --- | --- |
-| [Claude Code](#claude-code-cli) | `~/.claude.json` or `claude mcp add` | `mcpServers` |
-| [Claude Desktop](#claude-desktop) | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) / `%APPDATA%\Claude\claude_desktop_config.json` (Windows) | `mcpServers` |
-| [Cursor](#cursor) | `~/.cursor/mcp.json` or `.cursor/mcp.json` per-project | `mcpServers` |
-| [Windsurf](#windsurf-codeium) | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` |
-| [VS Code (MCP)](#vs-code) | `.vscode/mcp.json` per-workspace or user `settings.json` | `servers` (note: different key) |
-| [Zed](#zed) | `~/.config/zed/settings.json` or `.zed/settings.json` | `context_servers` (note: different key) |
-| [Continue](#continue) | `~/.continue/config.yaml` | `mcpServers` (YAML) |
-| [Cline](#cline) | VS Code settings → MCP, or `cline_mcp_settings.json` | `mcpServers` |
+| Client                            | Config file                                                                                                                         | Schema                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| [Claude Code](#claude-code-cli)   | `~/.claude.json` or `claude mcp add`                                                                                                | `mcpServers`                            |
+| [Claude Desktop](#claude-desktop) | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) / `%APPDATA%\Claude\claude_desktop_config.json` (Windows) | `mcpServers`                            |
+| [Cursor](#cursor)                 | `~/.cursor/mcp.json` or `.cursor/mcp.json` per-project                                                                              | `mcpServers`                            |
+| [Windsurf](#windsurf-codeium)     | `~/.codeium/windsurf/mcp_config.json`                                                                                               | `mcpServers`                            |
+| [VS Code (MCP)](#vs-code)         | `.vscode/mcp.json` per-workspace or user `settings.json`                                                                            | `servers` (note: different key)         |
+| [Zed](#zed)                       | `~/.config/zed/settings.json` or `.zed/settings.json`                                                                               | `context_servers` (note: different key) |
+| [Continue](#continue)             | `~/.continue/config.yaml`                                                                                                           | `mcpServers` (YAML)                     |
+| [Cline](#cline)                   | VS Code settings → MCP, or `cline_mcp_settings.json`                                                                                | `mcpServers`                            |
 
 Across all clients you almost always want to set `CEM_PROJECT` to the
 absolute path of the project whose `node_modules` cem-mcp should scan.

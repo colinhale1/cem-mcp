@@ -1,7 +1,5 @@
 ## What this PR does
 
-
-
 ## Why
 
 <!-- What user-visible problem does this solve? Link any issues. -->

@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # required for npm provenance signing
+  id-token: write # required for npm provenance signing
 
 jobs:
   publish:
