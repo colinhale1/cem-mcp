@@ -3,7 +3,14 @@ import { resolve } from "node:path";
 
 import { builtinAdapters, selectAdapters, findAdapter, type CemAdapter } from "./adapters/index.js";
 import { buildBm25Index, scoreBm25, type Bm25Index } from "./bm25.js";
-import { applyPackageFilter, loadConfig, type ResolvedConfig } from "./config.js";
+import {
+  applyPackageFilter,
+  loadConfig,
+  mergedPathOverrides,
+  perPackageEntries,
+  type ResolvedConfig,
+} from "./config.js";
+import { applyOverlay, loadOverlay } from "./overlay.js";
 import { buildIndex, fuzzySearchTags, type FuzzyMatch, type TagIndex } from "./fuzzy.js";
 import { discoverPackages, type DiscoveredPackage } from "./discovery.js";
 import { buildSynonymMap, expandQuery } from "./synonyms.js";
@@ -68,6 +75,10 @@ export interface CemDeclaration {
   cssProperties?: CemCssProperty[];
   cssParts?: CemCssPart[];
   superclass?: { name?: string; package?: string };
+  // Optional augmentation supplied by a per-package overlay file. Populated
+  // post-load by applyOverlay(); never present in upstream CEM data.
+  // See docs/adr-0005-extensibility.md.
+  overlay?: import("./overlay.js").OverlayElement;
   [k: string]: unknown;
 }
 
@@ -320,8 +331,9 @@ export class CemRegistry {
     for (const d of discovered) reg.known.set(d.name, d);
 
     // Manual path overrides from config — added in addition to discovered, win on
-    // name conflict because the user explicitly asked for them.
-    const manualPaths = config.config.paths ?? {};
+    // name conflict because the user explicitly asked for them. Merges top-level
+    // `paths` and per-package `packages.<name>.path` into one map.
+    const manualPaths = mergedPathOverrides(config.config);
     for (const [name, relPath] of Object.entries(manualPaths)) {
       const abs = resolve(config.baseDir, relPath);
       // Determine adapter eagerly so a misconfigured path fails fast at startup.
@@ -382,8 +394,31 @@ export class CemRegistry {
     }
     const manifest = await loadManifestThroughAdapter(meta.cemPath, meta.adapter);
     const loaded = indexManifest(meta, manifest, this.synonyms);
+    await this.maybeApplyOverlay(loaded);
     this.packages.set(name, loaded);
     return loaded;
+  }
+
+  private async maybeApplyOverlay(loaded: LoadedPackage): Promise<void> {
+    const pkgEntry = perPackageEntries(this.config.config.packages).get(loaded.name);
+    if (!pkgEntry?.overlay) return;
+    try {
+      const { document } = await loadOverlay(pkgEntry.overlay, this.config.baseDir);
+      const result = applyOverlay(loaded, document);
+      // Surface overlay drift on stderr; a tag in the overlay that doesn't
+      // match a real CEM declaration usually means an upstream rename.
+      if (result.unmatched.length) {
+        process.stderr.write(
+          `cem-mcp: overlay for ${loaded.name} references unknown tags: ${result.unmatched.join(", ")}\n`,
+        );
+      }
+    } catch (err) {
+      // Overlay errors don't block the package — log and continue with
+      // upstream CEM data only.
+      process.stderr.write(
+        `cem-mcp: failed to load overlay for ${loaded.name}: ${err instanceof Error ? err.message : err}\n`,
+      );
+    }
   }
 }
 

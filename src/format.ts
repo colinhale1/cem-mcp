@@ -91,7 +91,10 @@ export function formatElementCompact(decl: CemDeclaration, packageName?: string)
   );
   const cssVars = decl.cssProperties ?? [];
   const cssParts = decl.cssParts ?? [];
-  const examples = extractExamples(decl);
+  // Examples come from per-package overlays (ADR-0002 amendment + ADR-0005);
+  // the CEM ecosystem doesn't ship them. Empty when no overlay is supplied.
+  const examples = decl.overlay?.examples ?? [];
+  const usage = decl.overlay?.usage;
 
   if (attrs.length) {
     lines.push(`attrs (${attrs.length}): ${attrs.map((a) => a.name).join(", ")}`);
@@ -116,7 +119,11 @@ export function formatElementCompact(decl: CemDeclaration, packageName?: string)
     lines.push(`css: ${parts.join(", ")}`);
   }
   if (examples.length) {
-    lines.push(`examples: ${examples.length}`);
+    lines.push(`examples (${examples.length})`);
+  }
+  if (usage) {
+    lines.push("");
+    lines.push(`Usage: ${truncate(usage, 200)}`);
   }
 
   return lines.join("\n").trimEnd();
@@ -143,7 +150,8 @@ export function formatElementFull(decl: CemDeclaration, packageName?: string): s
   appendEvents(lines, decl.events ?? []);
   appendSlots(lines, decl.slots ?? []);
   appendCss(lines, decl.cssProperties ?? [], decl.cssParts ?? []);
-  appendExamples(lines, extractExamples(decl));
+  appendExamples(lines, decl.overlay?.examples ?? []);
+  appendUsage(lines, decl.overlay?.usage);
   return lines.join("\n").trimEnd();
 }
 
@@ -169,7 +177,7 @@ export function formatAspect(decl: CemDeclaration, aspect: Aspect, packageName?:
       appendCss(lines, decl.cssProperties ?? [], decl.cssParts ?? [], /*heading*/ false);
       break;
     case "examples":
-      appendExamples(lines, extractExamples(decl), /*heading*/ false);
+      appendExamples(lines, decl.overlay?.examples ?? [], /*heading*/ false);
       break;
   }
   const trimmed = lines.join("\n").trimEnd();
@@ -436,17 +444,9 @@ function appendExamples(lines: string[], examples: string[], heading = true): vo
   if (heading) lines.push("");
 }
 
-// Pull `@example` blocks from the declaration's description when present.
-// CEM schemas don't have a dedicated example field; convention is to embed
-// them in jsdoc-style descriptions. Best-effort, conservative parse.
-function extractExamples(decl: CemDeclaration): string[] {
-  const text = decl.description ?? "";
-  const out: string[] = [];
-  const re = /@example\b\s*([\s\S]*?)(?=(?:\n\s*@\w+\b)|$)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const body = m[1].trim();
-    if (body) out.push(body);
-  }
-  return out;
+function appendUsage(lines: string[], usage: string | undefined): void {
+  if (!usage) return;
+  lines.push("## usage");
+  lines.push(usage.trim());
+  lines.push("");
 }
