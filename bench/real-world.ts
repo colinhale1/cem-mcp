@@ -208,13 +208,13 @@ async function main(): Promise<void> {
     );
   }
   console.log(
-    "\nThe paraphrastic gap is real: tag-name matching alone can't bridge intent-only queries.",
+    "\nThe paraphrastic gap is real but no longer empty. Anchored queries are at ceiling.",
   );
   console.log(
-    "Description / attribute substring scoring helps, but isn't semantic — a follow-up would",
+    "Paraphrastic improvements ride on the BM25 text index + bidirectional synonym map; the",
   );
   console.log(
-    "add a small text index over descriptions, slot/event names, and attribute names.",
+    "remaining gap is mostly novel paraphrases the synonym map doesn't yet know about.",
   );
 }
 

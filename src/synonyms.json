@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "synonyms": {
+    "toast": ["alert", "notification", "snackbar"],
+    "snackbar": ["alert", "notification", "toast"],
+    "notification": ["alert", "notify", "toast"],
+    "banner": ["alert", "notification"],
+
+    "spinner": ["loader", "loading"],
+    "loader": ["spinner", "loading"],
+    "loading": ["spinner", "loader", "progress"],
+    "progress": ["loader", "loading"],
+    "indicator": ["status", "marker"],
+
+    "modal": ["dialog", "overlay"],
+    "dialog": ["modal", "popup", "overlay"],
+    "overlay": ["modal", "dialog"],
+    "sheet": ["drawer", "panel"],
+    "drawer": ["sidebar", "panel", "sheet"],
+    "sidebar": ["drawer", "panel", "nav"],
+
+    "popup": ["popover", "dialog", "menu"],
+    "popover": ["popup", "tooltip"],
+    "tooltip": ["popover", "hint"],
+    "hint": ["tooltip", "helper"],
+    "menu": ["dropdown", "list"],
+    "dropdown": ["select", "combobox", "menu"],
+    "combobox": ["dropdown", "select"],
+    "select": ["dropdown", "combobox", "picker"],
+
+    "accordion": ["expandable", "collapsible", "expand", "collapse", "disclosure"],
+    "expandable": ["accordion", "collapsible", "disclosure"],
+    "collapsible": ["accordion", "expandable"],
+    "disclosure": ["accordion", "expandable"],
+
+    "tab": ["tabs", "panel"],
+    "tabs": ["tab"],
+    "panel": ["card", "section", "tab"],
+    "section": ["panel", "group"],
+    "group": ["section", "set"],
+
+    "chip": ["tag", "pill", "label", "badge"],
+    "tag": ["chip", "label", "pill"],
+    "pill": ["chip", "badge", "tag"],
+    "badge": ["chip", "pill", "counter", "indicator"],
+
+    "card": ["panel", "tile"],
+    "tile": ["card"],
+    "avatar": ["profile", "user"],
+
+    "input": ["field", "textbox", "form"],
+    "field": ["input", "form"],
+    "textbox": ["input", "field"],
+    "textarea": ["editor", "multiline", "text"],
+    "editor": ["textarea", "text"],
+
+    "checkbox": ["check", "tick"],
+    "radio": ["choice", "option"],
+    "switch": ["toggle"],
+    "toggle": ["switch"],
+    "slider": ["range"],
+    "range": ["slider"],
+
+    "stepper": ["wizard", "steps", "step"],
+    "wizard": ["stepper", "steps"],
+    "navigation": ["nav", "navbar", "menu"],
+    "nav": ["navigation", "navbar"],
+    "navbar": ["nav", "navigation"],
+    "breadcrumb": ["trail", "path"],
+    "pagination": ["pager", "pages"],
+
+    "picker": ["chooser", "selector"],
+    "calendar": ["date", "datepicker"],
+    "date": ["calendar"],
+    "color": ["colour", "palette", "swatch"],
+    "palette": ["color", "swatch"],
+    "swatch": ["color", "palette", "sample"],
+
+    "icon": ["symbol", "glyph"],
+    "image": ["picture", "img"],
+    "list": ["listbox", "items"],
+    "table": ["grid", "data"],
+    "grid": ["table"],
+    "tree": ["hierarchy", "outline"],
+
+    "temporary": ["transient", "ephemeral"],
+    "permanent": ["persistent"]
+  }
+}

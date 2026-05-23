@@ -40,6 +40,20 @@ const ConfigSchema = z
         disable: z.array(z.string()).optional(),
       })
       .optional(),
+
+    /**
+     * Synonym map controls for paraphrastic search.
+     * - `extend`: additional synonyms merged into the built-in map. Keys and
+     *   values are lowercase single tokens. Pairs are bidirectional.
+     * - `disable`: when true, the built-in map is dropped and only `extend`
+     *   (if any) is used.
+     */
+    synonyms: z
+      .object({
+        extend: z.record(z.array(z.string())).optional(),
+        disable: z.boolean().optional(),
+      })
+      .optional(),
   })
   .strict();
 

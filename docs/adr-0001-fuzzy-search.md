@@ -130,3 +130,27 @@ What this says:
 - **The honest 84% overall number** is what someone using this tool against real LLM input should expect today. The 100% from the auto-generated bench was internal consistency; this is empirical quality.
 
 What the paraphrastic miss tells us: **the next meaningful improvement is a small text index over descriptions, slot descriptions, event descriptions, and attribute descriptions** — likely with stemming or at least a stop-word list. That's not a fuzzy-matcher problem; it's a missing component. Filed as future work.
+
+## Third addendum: BM25 text index + synonym map
+
+The follow-up landed: `src/bm25.ts` (Okapi BM25 with k1=1.5, b=0.75) + `src/text.ts` (stopword-filtered, camelCase-aware tokenizer) + `src/synonyms.ts` + `src/synonyms.json` (~40 bidirectional UI-domain clusters). Each component is tokenized once at load time into a single document combining description, summary, attribute names + descriptions, slot descriptions, event names + descriptions, CSS var / part names + descriptions, and the tag. Queries are tokenized, expanded through the synonym map (original tokens at weight 1.0, synonyms at 0.6), then BM25-scored. The score contribution is scaled `min(300, raw × 30)` so BM25 alone can rescue a paraphrastic query but cannot exceed the 400-point definitive-promotion threshold — paraphrastic matches return a ranked list, not a confident full-doc response.
+
+Real-world bench delta:
+
+| kind                | cases | top-1 before | top-1 after   | Δ        |
+| ------------------- | ----- | ------------ | ------------- | -------- |
+| anchored            | 31    | 100%         | 100%          | —        |
+| paraphrastic        | 12    | 50%          | **58%**       | **+8 pp**|
+| attribute-anchored  | 1     | 0%           | 0%            | —        |
+| **overall**         | 44    | 84%          | **86%**       | **+2 pp**|
+
+Top-3 paraphrastic improved more visibly (several "rank deep" misses became rank 2 / 3). Wins of note: `loading spinner → calcite-loader`, `show a temporary notification → sl-alert`, `color picker swatch → sl-color-picker`, `show a banner alert → nord-banner` — all driven by some combination of BM25 picking up multi-word matches across description + attribute text, and the synonym map bridging "notification ↔ alert", "spinner ↔ loader", etc.
+
+Latency stayed flat. Pre-indexing all 105 Calcite components takes ~3 ms; per-query BM25 lookup is ~50 µs for a 5-token expanded query. The total path (fuzzy + BM25 + score combination) is still well under 0.5 ms per query on this dataset.
+
+Remaining paraphrastic misses cluster into two categories:
+
+1. **Novel paraphrases the synonym map doesn't know.** `expandable section → calcite-accordion` fails because neither "expandable" nor "accordion" is in any other component's description, but `calcite-block-section` literally contains "section" so wins on tag/BM25 overlap. The synonym map has `accordion ↔ expandable`, but the query "expandable section" is split into tokens and `section` outweighs the synonym lift. Better stemming and tighter synonym clusters could close this.
+2. **Genuinely ambiguous queries.** `attribute-anchored` cases like `"scale s m l"` have many valid answers and are tied — no single right answer.
+
+Conclusion: the cheap option (BM25 + tiny synonym map, ~400 LOC, no dependencies) closes about a quarter of the paraphrastic gap and keeps top-3 quality very high. A future jump from 58% → 80%+ likely requires either substantially more synonym curation or a small local embedding model — that decision can wait for evidence that an LLM agent is actually bottlenecked here in real use.
