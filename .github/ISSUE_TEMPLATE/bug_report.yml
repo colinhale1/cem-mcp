@@ -1,0 +1,74 @@
+name: Bug report
+description: Something doesn't work the way you expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report. Please fill in what you can —
+        the more reproducible the better.
+
+  - type: input
+    id: version
+    attributes:
+      label: cem-mcp version
+      description: Output of `cem-mcp --version` or value in package.json.
+      placeholder: 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      placeholder: v20.11.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: client
+    attributes:
+      label: MCP client
+      options:
+        - Claude Code
+        - Claude Desktop
+        - Cursor
+        - Windsurf
+        - VS Code
+        - Zed
+        - Continue
+        - Cline
+        - Other (please specify in description)
+        - Not applicable (running standalone)
+    validations:
+      required: true
+
+  - type: input
+    id: package
+    attributes:
+      label: Component library the issue involves
+      description: e.g. @esri/calcite-components@5.0.2. If discovery is failing entirely, write "n/a".
+      placeholder: "@shoelace-style/shoelace@2.20.1"
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      placeholder: |
+        I asked for "calcite-button" and got ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server stderr output (if any)
+      description: cem-mcp prints discovery info to stderr at startup; paste relevant lines.
+      render: shell

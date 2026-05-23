@@ -1,9 +1,21 @@
-import builtinData from "./synonyms.json";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { WeightedTerm } from "./bm25.js";
 import { stem } from "./text.js";
 
-interface SynonymsData {
+// Load the starter synonym map via fs rather than `import ... from "./synonyms.json"`.
+// JSON imports under Node's ESM loader require an `assert`/`with` attribute
+// (`with { type: "json" }`), but emitting that attribute requires bumping the
+// TS `module` target. Reading the file at module init time keeps the source
+// portable across TS versions and Node 18+ without any extra ceremony.
+const here = dirname(fileURLToPath(import.meta.url));
+const builtinData = JSON.parse(
+  readFileSync(resolve(here, "./synonyms.json"), "utf8"),
+) as SynonymsData;
+
+export interface SynonymsData {
   version: number;
   synonyms: Record<string, string[]>;
 }

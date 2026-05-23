@@ -1,0 +1,22 @@
+name: Feature request
+description: A capability that's missing.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you're hitting
+      description: What can't you do today that you wish you could?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: How you'd like it to work
+      description: A rough sketch is fine; we'll refine in discussion.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds you've considered

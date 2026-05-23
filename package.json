@@ -1,18 +1,35 @@
 {
   "name": "cem-mcp",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "description": "MCP server that delivers repo-accurate web component documentation from Custom Elements Manifests in a project's node_modules.",
   "type": "module",
   "bin": {
     "cem-mcp": "dist/index.js"
   },
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cem": {
+      "types": "./dist/cem.d.ts",
+      "import": "./dist/cem.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.js"
+    }
+  },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/index.js",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "node --import tsx --test test/*.test.ts",
@@ -20,7 +37,9 @@
     "bench:multi": "tsx bench/multi.ts",
     "bench:realworld": "tsx bench/real-world.ts",
     "fetch-calcite": "node scripts/fetch-calcite-cem.mjs",
-    "fetch-libs": "node scripts/fetch-libs.mjs"
+    "fetch-libs": "node scripts/fetch-libs.mjs",
+    "pack:check": "node scripts/pack-check.mjs",
+    "prepublishOnly": "npm test && npm run build && npm run pack:check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
@@ -34,5 +53,32 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "custom-elements-manifest",
+    "cem",
+    "web-components",
+    "custom-elements",
+    "llm-tools",
+    "claude",
+    "cursor",
+    "code-assistant",
+    "documentation"
+  ],
+  "license": "MIT",
+  "author": "Colin Hale <halecolin1@gmail.com> (https://github.com/colinhale1)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colinhale1/cem-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/colinhale1/cem-mcp/issues"
+  },
+  "homepage": "https://github.com/colinhale1/cem-mcp#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

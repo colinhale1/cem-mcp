@@ -1,0 +1,12 @@
+name: my-config
+version: 1.0.0
+schema: v1
+
+mcpServers:
+  - name: cem
+    command: npx
+    args:
+      - "-y"
+      - cem-mcp
+    env:
+      CEM_PROJECT: /absolute/path/to/your/project

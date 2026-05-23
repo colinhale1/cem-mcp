@@ -5,7 +5,9 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 import { CemRegistry, searchElements, type LoadedPackage } from "./cem.js";
@@ -17,6 +19,10 @@ import {
   formatSearch,
 } from "./format.js";
 import { suggestPackages } from "./suggest.js";
+
+function hasFlag(...names: string[]): boolean {
+  return process.argv.some((a) => names.includes(a));
+}
 
 function readFlag(name: string): string | undefined {
   const eq = process.argv.find((a) => a.startsWith(`${name}=`))?.slice(`${name}=`.length);
@@ -32,6 +38,55 @@ function resolveProjectRoot(): string {
 function resolveConfigPath(): string | undefined {
   return readFlag("--config") ?? process.env.CEM_CONFIG;
 }
+
+async function readOwnVersion(): Promise<string> {
+  // dist/index.js → ../package.json once installed; src/index.ts → ../package.json in dev.
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const pkg = JSON.parse(await readFile(resolve(here, "../package.json"), "utf8")) as {
+      version?: string;
+    };
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+const HELP = `cem-mcp — MCP server delivering repo-accurate web component docs from
+Custom Elements Manifests discovered in a project's node_modules.
+
+USAGE
+  cem-mcp [--project <dir>] [--config <path>]
+  cem-mcp --help | --version
+
+OPTIONS
+  --project <dir>     Project root containing node_modules.
+                      Defaults to $CEM_PROJECT or the current working directory.
+  --config <path>     Path to a cem.config.json. Defaults to $CEM_CONFIG, or
+                      <project>/cem.config.json if present.
+  -h, --help          Print this help and exit.
+  -v, --version       Print the version and exit.
+
+ENVIRONMENT
+  CEM_PROJECT         Same as --project.
+  CEM_CONFIG          Same as --config.
+
+PROTOCOL
+  cem-mcp speaks the Model Context Protocol over stdio. It's meant to be
+  launched by an MCP-capable client (Claude Code, Cursor, Windsurf, VS Code
+  with MCP, Zed, Continue, Cline, etc.). See the README for client-specific
+  config snippets: https://github.com/colinhale1/cem-mcp#readme
+
+TOOL
+  get_component_docs(package?, query?)
+    - no args                → list every discovered package
+    - package only           → list components in that package
+    - package + "all"        → same as above
+    - package + exact tag    → full docs for that component
+    - package + any term     → fuzzy + BM25 + synonym-aware search
+    - query may be a string OR an array of strings (multi-lookup)
+`;
+
 
 const TOOL_NAME = "get_component_docs";
 
@@ -106,6 +161,15 @@ function unknownPackageMessage(pkgName: string, available: string[]): string {
 }
 
 async function main(): Promise<void> {
+  if (hasFlag("--help", "-h")) {
+    process.stdout.write(HELP);
+    return;
+  }
+  if (hasFlag("--version", "-v")) {
+    process.stdout.write(`${await readOwnVersion()}\n`);
+    return;
+  }
+
   const projectRoot = resolveProjectRoot();
   const configPath = resolveConfigPath();
   const registry = await CemRegistry.fromProject(projectRoot, { configPath });

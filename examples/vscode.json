@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "cem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "cem-mcp"],
+      "env": {
+        "CEM_PROJECT": "${workspaceFolder}"
+      }
+    }
+  }
+}

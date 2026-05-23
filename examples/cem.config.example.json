@@ -1,0 +1,28 @@
+{
+  "$comment": "Optional. Drop this at <project>/cem.config.json or point at it with --config / CEM_CONFIG.",
+
+  "packages": {
+    "$comment": "Allow-list and deny-list applied after discovery. Omit to discover everything.",
+    "include": ["@esri/calcite-components", "@shoelace-style/shoelace"],
+    "exclude": ["@some/legacy-lib"]
+  },
+
+  "paths": {
+    "$comment": "Manual package -> manifest path for CEMs outside node_modules (vendored builds, monorepo siblings). Paths resolve relative to this file.",
+    "@my/elements": "./vendor/my-elements/custom-elements.json"
+  },
+
+  "adapters": {
+    "$comment": "Skip specific built-in adapters by name. Useful if a non-CEM file happens to match one and you'd rather not surface it.",
+    "disable": ["carbon-html-data"]
+  },
+
+  "synonyms": {
+    "$comment": "Extend the bidirectional UI-domain synonym map. Pairs declared in either direction become bidirectional. No transitive closure.",
+    "extend": {
+      "snackbar": ["alert", "toast"],
+      "loader": ["spinner", "loading"]
+    },
+    "disable": false
+  }
+}

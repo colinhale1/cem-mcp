@@ -1,104 +1,124 @@
 # cem-mcp
 
-An MCP server that delivers **repo-accurate web component documentation** by reading the [Custom Elements Manifests](https://github.com/webcomponents/custom-elements-manifest) shipped by packages in your project's `node_modules`. One tool, package-aware, smart dispatch: list packages, list components, look one up, or fuzzy-search across many.
+[![npm](https://img.shields.io/npm/v/cem-mcp.svg)](https://www.npmjs.com/package/cem-mcp)
+[![CI](https://github.com/colinhale1/cem-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/colinhale1/cem-mcp/actions/workflows/ci.yml)
+[![Node ≥ 18](https://img.shields.io/node/v/cem-mcp)](https://nodejs.org)
+[![MIT](https://img.shields.io/npm/l/cem-mcp.svg)](LICENSE)
 
-## Why
+**Stop your AI assistant from hallucinating web-component props.** `cem-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server that hands a coding agent the *actual* documentation of the web components your project depends on — attributes, properties, methods, events, slots, CSS vars, and CSS parts — by reading the [Custom Elements Manifest](https://github.com/webcomponents/custom-elements-manifest) shipped inside each library in `node_modules`.
 
-Web component libraries publish a `custom-elements.json` that describes their public API — attributes, properties, methods, events, slots, CSS custom properties, and CSS shadow parts. This server hands that source-of-truth to an LLM via MCP, so coding agents stop hallucinating prop names. Because discovery is `node_modules`-based, it works for any library the project actually depends on.
+No description-scraping, no out-of-date docs, no made-up prop names. If the library publishes a CEM, the agent gets the truth.
 
-## Install & build
+---
 
-```bash
-npm install
-npm run build
-```
-
-## Run
-
-Point the server at a project root (the directory containing `node_modules`):
+## 30-second tour
 
 ```bash
-CEM_PROJECT=/path/to/project node dist/index.js
-# or
-node dist/index.js --project /path/to/project --config /path/to/cem.config.json
+npm i -g cem-mcp
 ```
 
-Dev mode (no build step):
+Add to your MCP client config (one of [Claude Code, Claude Desktop, Cursor, Windsurf, VS Code, Zed, Continue, Cline](#wire-it-into-your-agent) — see `examples/` for copy-paste configs):
 
-```bash
-npm run dev -- --project /path/to/project
-```
-
-### Wire it into Claude Code
-
-```json
+```jsonc
 {
   "mcpServers": {
     "cem": {
-      "command": "node",
-      "args": ["/abs/path/to/cem-mcp/dist/index.js"],
+      "command": "cem-mcp",
       "env": { "CEM_PROJECT": "/abs/path/to/your/project" }
     }
   }
 }
 ```
 
-## The tool
+Now the agent has a `get_component_docs` tool that resolves natural-language questions against the real CEMs:
 
-One tool, `get_component_docs(package?, query?)`. Every parameter is optional; dispatch covers four cases:
+- `"button"` → full docs for `calcite-button` / `sl-button` / etc.
+- `"DatePicker"` → `calcite-date-picker` (handles PascalCase, kebab, acronyms, typos)
+- `"show a temporary toast"` → `calcite-alert` (paraphrastic, via synonym map)
+- `"scale s m l"` → ranked list of every component with that attribute pattern
 
-| `package`       | `query`                                                   | Result                                                                                                                                                                                                  |
-| --------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _(omitted)_     | _(any)_                                                   | List every package the server discovered.                                                                                                                                                               |
-| set             | _(omitted)_ or `"all"`                                    | List every component in that package.                                                                                                                                                                   |
-| set             | exact tag name, e.g. `"sl-button"` (case-insensitive)     | Full docs: attributes, properties, methods, events, slots, CSS vars, CSS parts.                                                                                                                         |
-| set             | any other term, e.g. `"DatePicker"`, `"alrt"`, `"dp"`     | Ranked fuzzy search. A clear-winner hit returns full docs directly; otherwise returns a ranked list.                                                                                                    |
-| set             | array of strings                                          | Multi-query — each item is dispatched independently within the chosen package and concatenated with section markers, so an agent can ask for `["sl-button", "alert", "DatePicker"]` in one call.        |
+---
 
-If the agent asks for a package the server doesn't know, the error includes a **Did you mean?** suggestion based on a substring + capped-Levenshtein match over the known package names.
+## Wire it into your agent
 
-## Discovery and adapters
+| Client | Config file | Snippet |
+| --- | --- | --- |
+| [Claude Code](examples/claude-code.json) | `~/.claude.json` or `claude mcp add cem -- npx -y cem-mcp` | `mcpServers` |
+| [Claude Desktop](examples/claude-desktop.json) | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) <br/> `%APPDATA%\Claude\claude_desktop_config.json` (Win) | `mcpServers` |
+| [Cursor](examples/cursor.json) | `~/.cursor/mcp.json` or `.cursor/mcp.json` | `mcpServers` |
+| [Windsurf](examples/windsurf.json) | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` |
+| [VS Code](examples/vscode.json) | `.vscode/mcp.json` | `servers` _(different key)_ |
+| [Zed](examples/zed.json) | `~/.config/zed/settings.json` | `context_servers` _(different key)_ |
+| [Continue](examples/continue.yaml) | `~/.continue/config.yaml` | `mcpServers` _(YAML)_ |
+| [Cline](examples/cline.json) | Cline MCP settings | `mcpServers` |
 
-Discovery scans `node_modules` (top-level and `@scoped/*`) at the project root, opens each `package.json`, and registers packages that ship a Custom Elements Manifest. Each candidate file is run through an **adapter chain** — the first adapter that recognizes the file's shape wins. Built-in adapters:
+All examples are in [`examples/`](examples/) with the literal JSON ready to copy. The README there has client-specific notes.
 
-| adapter             | shape                                                                      | covers                                                            |
-| ------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `cem2`              | Standard CEM 2.x (`{ schemaVersion, modules: [...] }`)                     | Calcite, Shoelace, Patternfly, RHDS, Nord, UI5, Vivid, Lit libs   |
-| `carbon-html-data`  | VS Code HTML custom-data (`{ version, tags: [...] }`)                      | Carbon (`@carbon/web-components`, `@cds/core`)                    |
+---
+
+## What it does (in detail)
+
+One MCP tool, `get_component_docs(package?, query?)`. Both parameters optional:
+
+| `package` | `query` | Result |
+| --- | --- | --- |
+| _omitted_ | _any_ | List every discovered package |
+| set | _omitted_ or `"all"` | List every component in that package |
+| set | exact tag (case-insensitive) | Full docs |
+| set | any term | Ranked search — fuzzy + BM25 + synonym-aware. Clear-winner hit returns full docs; otherwise a ranked list |
+| set | `string[]` | Multi-query — each item dispatched independently, results joined |
+
+If the agent asks for an unknown package, the error includes a **Did you mean?** suggestion.
+
+### Bench results (44 hand-curated real-world queries, 6 libraries)
+
+| Query kind | Top-1 | Top-3 |
+| --- | --- | --- |
+| Anchored (`"button"`, `"DatePicker"`, `"alrt"`) | **100%** | 100% |
+| Paraphrastic (`"show a temporary toast"`, `"loading spinner"`) | **92%** | 100% |
+| Attribute-anchored (`"scale s m l"`) | **100%** | 100% |
+| **Overall** | **98%** | **100%** |
+
+For the head-to-head against `fuzzysort` and the full methodology see [`docs/adr-0001-fuzzy-search.md`](docs/adr-0001-fuzzy-search.md).
+
+---
+
+## How discovery works
+
+`cem-mcp` walks `node_modules` (top-level and `@scoped/*`) in the project root, opens each `package.json`, and registers packages that ship a Custom Elements Manifest. Each candidate file is matched against a chain of **schema adapters**:
+
+| adapter | shape | covers |
+| --- | --- | --- |
+| `cem2` | Standard CEM 2.x (`{ schemaVersion, modules: [...] }`) | Calcite, Shoelace, Patternfly, RHDS, Nord, UI5, Vivid, most Lit libs |
+| `carbon-html-data` | VS Code HTML custom-data (`{ version, tags: [...] }`) | `@carbon/web-components`, `@cds/core` |
 
 Fallback paths checked when `customElements` isn't declared in `package.json`: `custom-elements.json`, `dist/custom-elements.json`, `dist/docs/custom-elements.json`, `dist/docs/api.json`.
 
-### Adding a new adapter
+Adding a new schema is a single file under `src/adapters/` plus one line in `src/adapters/index.ts` — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-1. Create `src/adapters/<name>.ts` exporting a `CemAdapter` (`matches(parsed)` + `load(parsed, sourcePath)`).
-2. Register it in `src/adapters/index.ts`.
-3. Add a test case in `test/adapters.test.ts`.
+## How search works
 
-The interface is in `src/adapters/types.ts`. Discovery is schema-agnostic from there on — your adapter converts the source JSON into our internal `CustomElementsManifest` shape and the rest of the pipeline (indexing, fuzzy search, formatting) handles it uniformly.
+Four scoring channels combine per query, all pre-indexed at load:
+
+1. **Tag fuzzy index** — tuned for kebab-case tags with a library-wide common prefix. Exact, prefix-stripped, PascalCase, concatenated flat, acronym, substring, and capped Levenshtein typo tolerance.
+2. **BM25 text index** — over per-component description / attribute / event / slot / CSS metadata. Tokenizer strips stopwords, splits camelCase, applies light stemming (`loading → load`, `expandable → expand`). Queries expanded through a bidirectional synonym map (~40 UI-domain clusters: `toast ↔ alert`, `spinner ↔ loader`, etc.).
+3. **Token-to-tag boost** — when any query token (original or synonym-expanded) names a kebab token of some component, that component gets lifted. Rescues cases where the target's description is empty.
+4. **Attribute-anchored channel** — when the query head names an attribute shared by ≥2 components, score by attribute presence + value coverage. Survives single-character value tokens.
 
 ## Configuration
 
-Drop a `cem.config.json` in the project root (or pass `--config <path>`):
+Drop a `cem.config.json` in the project root (or pass `--config <path>`). Everything is optional; strict zod schema rejects unknown keys at startup. See [`examples/cem.config.example.json`](examples/cem.config.example.json).
 
 ```jsonc
 {
-  // Allow-list / deny-list applied after discovery.
   "packages": {
-    "include": ["@esri/calcite-components", "@shoelace-style/shoelace"],
+    "include": ["@esri/calcite-components"],
     "exclude": ["@some/legacy-lib"]
   },
-  // Manual package -> manifest path. Useful for CEMs outside node_modules
-  // (vendored builds, monorepo siblings). Paths resolve relative to this file.
   "paths": {
     "@my/elements": "./vendor/my-elements/custom-elements.json"
   },
-  // Skip specific built-in adapters by name.
-  "adapters": {
-    "disable": ["carbon-html-data"]
-  },
-  // Add to or replace the built-in synonym map used by paraphrastic search.
-  // Pairs are bidirectional (declaring "toast": ["alert"] also makes "alert"
-  // → "toast"). No transitive closure is computed.
+  "adapters": { "disable": ["carbon-html-data"] },
   "synonyms": {
     "extend": { "snackbar": ["alert", "toast"] },
     "disable": false
@@ -106,33 +126,60 @@ Drop a `cem.config.json` in the project root (or pass `--config <path>`):
 }
 ```
 
-All fields are optional; the schema is `strict` (unknown fields throw at startup so typos surface immediately).
+---
 
-## Fuzzy search
+## CLI
 
-Four scoring channels combine per query, all built once at load time:
+```
+cem-mcp [--project <dir>] [--config <path>]
+cem-mcp --help | --version
+```
 
-- **Tag fuzzy index** (`src/fuzzy.ts`) — tuned for kebab-case tag names with a library-wide common prefix. Matches across exact tag, prefix-stripped form, PascalCase, concatenated flat, acronym, substring, and capped Levenshtein edit-distance. Strong on anchored queries (`"button"`, `"DatePicker"`, `"alrt"`, `"dp"`).
-- **BM25 text index** (`src/bm25.ts`) — Okapi BM25 over the per-component bag of words from description, summary, attribute names + descriptions, slot descriptions, event names + descriptions, CSS var / part names + descriptions, and the tag itself. Tokenizer strips stopwords, splits camelCase boundaries, and applies a light suffix stemmer (`loading → load`, `expandable → expand`, `buttons → button`). Queries are expanded through a bidirectional synonym map (`src/synonyms.json`, ~40 UI-domain clusters like `toast ↔ alert`, `spinner ↔ loader`) before scoring. Strong on paraphrastic queries.
-- **Token-to-tag boost** — when any query token, original or synonym-expanded, exactly names a kebab token in a component's tag, that component gets a fixed bonus (synonyms at 0.6 weight). Rescues cases like `expandable → accordion → calcite-accordion` when the component's description is empty.
-- **Attribute-anchored channel** — when the head token names an attribute shared by ≥2 components, treat the query as a category lookup. Score by attribute presence + value coverage; bypass BM25 (which would just add noise to a tie). Handles `"scale s m l"` correctly by surviving single-character value tokens that the regular tokenizer drops.
+The server speaks MCP over stdio; you don't typically invoke it directly — your MCP client launches it. Environment overrides: `CEM_PROJECT`, `CEM_CONFIG`.
 
-See [`docs/adr-0001-fuzzy-search.md`](docs/adr-0001-fuzzy-search.md) for benchmarks: **100% top-1 anchored, 92% top-1 paraphrastic, 100% top-1 attribute-anchored, 98% overall on the hand-curated 44-case real-world set. Top-3: 100%.**
+## Programmatic use
 
-## Scripts
+Types are exported. Use `CemRegistry` directly if you want to embed discovery + search in another tool:
+
+```ts
+import { CemRegistry } from "cem-mcp/cem";
+
+const registry = await CemRegistry.fromProject("/path/to/project");
+const pkg = await registry.get("@esri/calcite-components");
+// pkg.byTag, pkg.elements, pkg.index, pkg.bm25, pkg.synonyms, pkg.attrIndex
+```
+
+Adapters are extensible the same way:
+
+```ts
+import type { CemAdapter } from "cem-mcp/adapters";
+// register your own and pass via internal API; see src/adapters/ for examples
+```
+
+---
+
+## Development
 
 ```bash
-npm test               # node:test runner — 50 tests across adapters, discovery, fuzzy, config, suggester, integration
-npm run bench          # custom vs fuzzysort, 22-case hand-curated Calcite set
-npm run bench:multi    # auto-generated cross-library bench (~3000 cases)
-npm run bench:realworld # hand-curated paraphrastic bench across 6 libraries
-npm run fetch-calcite  # populate test/fixtures/project with just Calcite 5
-npm run fetch-libs     # populate test/fixtures/project with 10 libraries
+npm install
+npm run fetch-libs   # populate test/fixtures/project (10 component libraries, ~30s)
+npm test             # 82 tests across adapters, discovery, fuzzy, BM25, config, integration
+npm run build        # tsc + chmod +x dist/index.js
+npm run dev -- --project /path/to/your/project   # run server in dev
+npm run bench:realworld  # the honest paraphrastic bench
+
+npm run pack:check   # verify what would ship to npm (runs as part of prepublishOnly)
 ```
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for project layout, how to add an adapter, and how to extend the synonym map.
 
 ## Known limitations
 
-- **Paraphrastic queries** are at 92% top-1 / 100% top-3 on the hand-curated real-world bench. The single remaining miss (`expandable section → calcite-block-section` instead of `calcite-accordion-item`) is defensible — `block-section` literally contains "section". Extending `synonyms.extend` in config closes specific gaps; the path beyond 92% would need either substantial synonym curation or a small embedding model and isn't built.
-- **2-letter acronyms** with multiple plausible expansions (e.g. `cb` for `calcite-button` vs `calcite-block`) are inherently ambiguous and tied on score. We fall back to alphabetical; this is sometimes wrong.
-- **No support yet** for components declared only through `module.exports[]` `custom-element-definition` entries (some Lit/FAST patterns). None of the 8 working libraries in the bench use this pattern.
-- **No live reload.** Adding/upgrading a package requires restarting the server.
+- **Paraphrastic ceiling**: 92% top-1 / 100% top-3 on the real-world bench. The single remaining miss is defensible (`expandable section → calcite-block-section` — that tag literally has "section" in it). Further jumps would need either curated synonym work via config or a small embedding model; the latter isn't built.
+- **2-letter acronyms** (`cb` for both `calcite-button` and `calcite-block`) are tied on score and fall back to alphabetical, sometimes wrong.
+- **No support yet** for components declared only through `module.exports[]` `custom-element-definition` entries (some Lit / FAST patterns).
+- **No live reload.** Adding or upgrading a package in the project requires restarting the server.
+
+## License
+
+[MIT](LICENSE)

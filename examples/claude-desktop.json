@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cem": {
+      "command": "npx",
+      "args": ["-y", "cem-mcp"],
+      "env": {
+        "CEM_PROJECT": "/absolute/path/to/your/project"
+      }
+    }
+  }
+}

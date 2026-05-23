@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }} · ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Fetch test fixtures
+        run: npm run fetch-libs
+        # Fixture fetch can be flaky on CI (network to npm). Don't break the
+        # whole matrix over it — integration tests will skip with a clear
+        # message if the fixture is missing.
+        continue-on-error: true
+      - run: npm test
+      - run: npm run pack:check
+
+  bench:
+    name: bench (real-world quality, informational)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch-libs
+      - run: npm run bench:realworld | tee bench.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-real-world
+          path: bench.txt
