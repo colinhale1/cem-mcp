@@ -1,6 +1,6 @@
 {
   "name": "cem-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server that delivers repo-accurate web component documentation from Custom Elements Manifests in a project's node_modules.",
   "type": "module",
   "bin": {

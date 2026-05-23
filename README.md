@@ -30,7 +30,7 @@ Add to your MCP client config (one of [Claude Code, Claude Desktop, Cursor, Wind
 }
 ```
 
-Now the agent has a `get_component_docs` tool that resolves natural-language questions against the real CEMs:
+Now the agent has `get_component_docs` (look up) and `validate_component_usage` (check a snippet) tools that resolve natural-language questions against the real CEMs:
 
 - `"button"` → full docs for `calcite-button` / `sl-button` / etc.
 - `"DatePicker"` → `calcite-date-picker` (handles PascalCase, kebab, acronyms, typos)
@@ -58,15 +58,32 @@ All examples are in [`examples/`](examples/) with the literal JSON ready to copy
 
 ## What it does (in detail)
 
-One MCP tool, `get_component_docs(package?, query?)`. Both parameters optional:
+Two MCP tools.
 
-| `package` | `query`                      | Result                                                                                                    |
-| --------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
-| _omitted_ | _any_                        | List every discovered package                                                                             |
-| set       | _omitted_ or `"all"`         | List every component in that package                                                                      |
-| set       | exact tag (case-insensitive) | Full docs                                                                                                 |
-| set       | any term                     | Ranked search — fuzzy + BM25 + synonym-aware. Clear-winner hit returns full docs; otherwise a ranked list |
-| set       | `string[]`                   | Multi-query — each item dispatched independently, results joined                                          |
+### `get_component_docs(package?, query?, aspect?, attr?, event?)`
+
+Progressive disclosure — compact view by default, drill in for detail. See [ADR-0002](docs/adr-0002-tool-shape.md) for the design.
+
+| `package` | `query`              | Result                                                                          |
+| --------- | -------------------- | ------------------------------------------------------------------------------- |
+| _omitted_ | _omitted_            | List every discovered package                                                   |
+| _omitted_ | set                  | **Cross-package search** — ranked hits grouped by package                       |
+| set       | _omitted_ or `"all"` | List every component in that package                                            |
+| set       | exact tag            | Compact docs (section names + counts; drill in for detail)                      |
+| set       | any term             | Ranked search — fuzzy + BM25 + synonym-aware. Clear-winner promotes to compact. |
+| set       | `string[]`           | Multi-query — each item dispatched independently, results joined                |
+
+Drill-downs (require `package` + exact tag in `query`):
+
+- `aspect: 'attrs' | 'events' | 'slots' | 'css' | 'methods' | 'examples' | 'all'` — expand one section.
+- `attr: '<name>'` — full detail for one attribute (type, default, description).
+- `event: '<name>'` — full detail for one event.
+
+Section names in compact output match `aspect` values 1:1, so the agent can target drill-downs without re-reading prior output.
+
+### `validate_component_usage(snippet, package?)`
+
+Lint an HTML snippet against the loaded CEMs. Catches: unknown custom elements, unknown attributes per tag, and enum-typed attribute values outside the declared union. HTML-only; skips `data-*` / `aria-*` / `on*` / dynamic bindings (`:`, `@`, `.`, `?`).
 
 If the agent asks for an unknown package, the error includes a **Did you mean?** suggestion.
 

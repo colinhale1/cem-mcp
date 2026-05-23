@@ -4,6 +4,30 @@ All notable changes to `cem-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-23
+
+Tool-surface redesign for context hygiene. See [ADR-0002](docs/adr-0002-tool-shape.md).
+
+### Added
+- Progressive disclosure on `get_component_docs`: compact view by default with
+  named-only sections + counts; `aspect: 'attrs' | 'events' | 'slots' | 'css' | 'methods' | 'examples' | 'all'`
+  to drill into one section; `attr: '<name>'` / `event: '<name>'` for single-member detail.
+- Cross-package search when `package` is omitted but `query` is set — ranked
+  hits grouped by package, with a confidence floor and an "honest negative"
+  output when nothing scores well.
+- `validate_component_usage(snippet, package?)`: HTML snippet linter that flags
+  unknown custom elements, unknown attributes per tag, and enum-typed values
+  outside the declared union. Suggestions via capped edit-distance.
+
+### Changed
+- Section names in element output match the aspect vocabulary (`attrs`/`events`/`slots`/`css`/`methods`/`examples`).
+- Prose hints (`_Call this tool again..._`) removed from output. The tool
+  grammar lives in the schema instead, so the agent loads it once at MCP
+  handshake and can target drill-downs without re-reading prior output.
+- Default response shape for an exact-tag lookup is now ~300 tokens (compact),
+  not the previous ~2 K-token full element view. `aspect: 'all'` reproduces
+  the old eager output.
+
 ## [1.0.0] - 2026-05-23
 
 First public release. Distillation of the prior 0.x work into a publishable

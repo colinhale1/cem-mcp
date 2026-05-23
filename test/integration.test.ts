@@ -12,7 +12,8 @@ import { existsSync } from "node:fs";
 import { CemRegistry, searchElements, type LoadedPackage } from "../src/cem.js";
 import {
   formatComponentList,
-  formatElement,
+  formatElementCompact,
+  formatElementFull,
   formatMulti,
   formatPackageList,
   formatSearch,
@@ -52,12 +53,25 @@ describe("integration: calcite fixture", () => {
     assert.match(out, /@esri\/calcite-components/);
   });
 
-  it("formats full element docs for calcite-button", () => {
+  it("formats full element docs for calcite-button via aspect=all", () => {
     const decl = pkg.byTag.get("calcite-button")!;
-    const out = formatElement(decl, pkg.name);
-    assert.match(out, /## Attributes/);
+    const out = formatElementFull(decl, pkg.name);
+    assert.match(out, /## attrs/);
     assert.match(out, /alignment/);
     assert.match(out, /@esri\/calcite-components/);
+  });
+
+  it("formats compact docs that list section counts but not field detail", () => {
+    const decl = pkg.byTag.get("calcite-button")!;
+    const out = formatElementCompact(decl, pkg.name);
+    // Compact view advertises the aspect vocabulary: section names match
+    // aspect values 1:1, with counts in parentheses as locators.
+    assert.match(out, /attrs \(\d+\):/);
+    assert.match(out, /alignment/);
+    // No field types / defaults in compact mode (those live in aspect=attrs).
+    assert.doesNotMatch(out, /default `/);
+    // No prose "tip" hints — grammar lives in the schema, not the output.
+    assert.doesNotMatch(out, /Call this tool/i);
   });
 
   it("resolves fuzzy variants to the right tag at top-1", () => {
@@ -78,10 +92,10 @@ describe("integration: calcite fixture", () => {
   it("formats multi-query with section markers", () => {
     const dispatch = (q: string): string => {
       const e = pkg.byTag.get(q.toLowerCase());
-      if (e) return formatElement(e, pkg.name);
+      if (e) return formatElementCompact(e, pkg.name);
       const hits = searchElements(pkg, q);
       return hits.length === 1
-        ? formatElement(hits[0].decl, pkg.name)
+        ? formatElementCompact(hits[0].decl, pkg.name)
         : formatSearch(pkg.name, q, hits);
     };
     const multi = formatMulti(pkg.name, [
