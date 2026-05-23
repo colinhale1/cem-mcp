@@ -8,11 +8,23 @@ design background see [`docs/adr-0001-fuzzy-search.md`](docs/adr-0001-fuzzy-sear
 ```bash
 git clone https://github.com/colinhale1/cem-mcp.git
 cd cem-mcp
-npm install
+npm install           # `prepare` script installs husky pre-commit hooks
 npm run fetch-libs   # populate test/fixtures/project with 8+ component libraries (~30s)
 npm test             # 82 tests across adapters, discovery, fuzzy, BM25, config, integration
 npm run build        # tsc + chmod +x dist/index.js
 ```
+
+## Pre-commit hooks
+
+`npm install` wires up a husky pre-commit hook that runs:
+
+1. **lint-staged** — `eslint --fix` and `prettier --write` against only the
+   files you actually changed (fast).
+2. **`npm test`** — the full 82-test suite (~1.5 s).
+
+If you really need to bypass it (WIP commits, fixing a pre-commit failure
+in a follow-up), use `git commit --no-verify`. CI re-runs everything so
+nothing slips through to `main`.
 
 Run the server against your own project:
 

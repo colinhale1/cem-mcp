@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Pre-commit checks for cem-mcp.
+#
+# 1. lint-staged runs ESLint --fix and Prettier --write on staged files only,
+#    so style/lint fixes are automatic and we don't pay to lint the whole tree.
+# 2. Then the full unit-test suite runs. Tests are quick (~1.5s for 82 tests)
+#    so we can afford to catch breakages anywhere in the codebase, not just
+#    in files you happened to touch.
+#
+# Skip with `git commit --no-verify` if you really need to (WIP, fixing a
+# pre-commit failure in a follow-up, etc.).
+
+set -e
+
+npx lint-staged
+npm test
