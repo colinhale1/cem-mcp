@@ -120,3 +120,18 @@ What's deliberately out of scope for MVP: JSX/template literal parsing, validati
 - **Self-describing pagination only works if the grammar lives in the schema.** Inline "tip:" hints in output are a tax paid on every call for the agent's first call's benefit. Move that text to the tool description where it's loaded once.
 - **Single-intent tools beat polymorphic ones for LLM callers.** A tool description that says one thing the tool does, with a tight schema, is easier for the agent to route to correctly than a polymorphic tool whose mode depends on which optional field is set.
 - **Negative results are part of the contract.** Returning a long ranked list when nothing scored well is dishonest formatting — it implies confidence the ranker doesn't have. A confidence floor with a clear "no good match" is the honest shape.
+
+## Amendment 1 (2026-05-23): examples are sourced from overlays, not CEMs
+
+**Context.** A post-1.1 audit of the 9 bench libraries found **zero** examples in the CEM data — neither in `@example` JSDoc blocks (0 occurrences across 9 libraries) nor in inline ` ``` ` code-fenced descriptions (also 0). The `aspect: 'examples'` slot we shipped in 1.1 returns `(none)` for every real library, which is worse than not shipping the slot at all — the agent's first call costs a tool round-trip to discover the slot is dead.
+
+**Decision.** Keep `aspect: 'examples'` in the schema, but source the data from **per-package overlays** (introduced in [ADR-0005](adr-0005-extensibility.md)) instead of from CEM JSDoc. Specifically:
+
+- The `@example` extractor (`extractExamples` in `src/format.ts`) is removed.
+- The overlay loader supplies `elements.<tag>.examples: string[]`.
+- Compact view shows `examples (N):` only when N > 0 (zero-count sections are already omitted per the original ADR-0002 rules).
+- `aspect: 'examples'` returns `(none)` if no overlay supplies them, same as any other empty section.
+
+**Why not just drop the aspect.** Two reasons. (1) Teams with vendored design systems will supply examples via overlays — the data exists, just not in CEM. Keeping the aspect means they don't have to teach their agents a new vocabulary when they wire up overlays. (2) The cost of keeping a slot that returns `(none)` for unaugmented libraries is zero — the compact view already omits zero-count sections, and `aspect: 'examples'` already returns `(none)` for empty inputs.
+
+**Migration.** None required for existing users — output for unaugmented libraries is identical (no examples section shown). The change is observable only when an overlay is supplied.
