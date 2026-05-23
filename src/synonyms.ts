@@ -1,6 +1,7 @@
 import builtinData from "./synonyms.json";
 
 import type { WeightedTerm } from "./bm25.js";
+import { stem } from "./text.js";
 
 interface SynonymsData {
   version: number;
@@ -36,10 +37,15 @@ export function buildSynonymMap(
     map.set(a, arr);
   };
 
-  for (const [key, vals] of Object.entries(source)) {
-    for (const v of vals) {
-      addEdge(key, v);
-      addEdge(v, key);
+  // Stem both keys and values so the map collides with stemmed query tokens.
+  // "loading" in the query stems to "load"; if the map says
+  // "spinner ↔ loading", we need "spinner ↔ load" so the lookup hits.
+  for (const [rawKey, vals] of Object.entries(source)) {
+    const key = stem(rawKey);
+    for (const rawVal of vals) {
+      const val = stem(rawVal);
+      addEdge(key, val);
+      addEdge(val, key);
     }
   }
   return map;

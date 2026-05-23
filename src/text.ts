@@ -23,6 +23,40 @@ const STOPWORDS = new Set([
   "specify", "specifies", "set", "sets", "get", "gets", "make", "makes",
 ]);
 
+// Light suffix-stripping stemmer. Not a full Porter — we just want word-form
+// collapse so "loading" and "load", "expandable" and "expand", "buttons" and
+// "button" share an indexed form. The rules are intentionally conservative
+// (5+ char tokens only) to avoid butchering short legitimate words like
+// "this", "was", "us", "tab".
+//
+// Applied at BOTH index time and query time, so the produced stem doesn't
+// need to be a real English word — it just needs to be stable.
+export function stem(token: string): string {
+  if (token.length < 5) return token;
+
+  // -able / -ible: expandable → expand, collapsible → collaps
+  if (token.length >= 6 && (token.endsWith("able") || token.endsWith("ible"))) {
+    return token.slice(0, -4);
+  }
+  // -ing: loading → load (length guard excludes "thing", "string").
+  if (token.length >= 6 && token.endsWith("ing")) return token.slice(0, -3);
+  // -ed: loaded → load. Length guard avoids butchering short -ed words.
+  if (token.length >= 6 && token.endsWith("ed")) return token.slice(0, -2);
+  // -ly: quickly → quick.
+  if (token.length >= 5 && token.endsWith("ly")) return token.slice(0, -2);
+  // Plural -s: buttons → button. Skip -ss / -us / 5-letter words to avoid
+  // false positives like alias → alia, focus → focu, class → clas.
+  if (
+    token.length >= 6 &&
+    token.endsWith("s") &&
+    !token.endsWith("ss") &&
+    !token.endsWith("us")
+  ) {
+    return token.slice(0, -1);
+  }
+  return token;
+}
+
 export function tokenize(text: string | null | undefined): string[] {
   if (!text) return [];
   return text
@@ -32,5 +66,6 @@ export function tokenize(text: string | null | undefined): string[] {
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
+    .filter((t) => t.length >= 2 && !STOPWORDS.has(t))
+    .map(stem);
 }

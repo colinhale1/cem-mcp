@@ -101,6 +101,19 @@ export interface LoadedPackage {
   prefix: string; // common tag prefix (e.g. "calcite")
   bm25: Bm25Index; // pre-built BM25 index over component descriptions / attribute text
   synonyms: Map<string, string[]>; // bidirectional synonym map applied at query time
+  // attrIndex: attribute name → tags that declare that attribute. Used to
+  // detect attribute-anchored queries like "scale s m l".
+  attrIndex: Map<string, Set<string>>;
+  // attrValuesByTag: tag → attribute name → set of declared values (extracted
+  // from type.text and type.values). Lets attribute-anchored queries score
+  // by value-coverage ("scale" + "s|m|l" → strong match for components whose
+  // scale attribute accepts s/m/l).
+  attrValuesByTag: Map<string, Map<string, Set<string>>>;
+  // tagTokenIndex: kebab token (e.g. "accordion") → tags that contain it.
+  // Used for the synonym-to-tag boost — when a synonym expansion lands on a
+  // token that names a component fragment, that component should win even if
+  // its description text is empty.
+  tagTokenIndex: Map<string, Set<string>>;
 }
 
 async function loadManifestThroughAdapter(
@@ -169,6 +182,25 @@ function declarationText(decl: CemDeclaration): string {
   return parts.join(" ");
 }
 
+// Pull a flat list of value tokens from an attribute declaration. Values
+// appear either in `type.text` as a union of quoted strings
+// (`"s" | "m" | "l"`) or as a structured `type.values` array. We keep them
+// lowercased and unfiltered so single-char tokens like "s", "m", "l" survive
+// for attribute-value matching.
+function attributeValues(a: CemAttribute): string[] {
+  const out = new Set<string>();
+  if (a.type?.text) {
+    for (const m of a.type.text.matchAll(/"([^"]+)"/g)) out.add(m[1].toLowerCase());
+  }
+  const structured = (a as { type?: { values?: Array<{ value?: unknown }> } }).type?.values;
+  if (Array.isArray(structured)) {
+    for (const v of structured) {
+      if (v && typeof v.value === "string") out.add(v.value.toLowerCase());
+    }
+  }
+  return Array.from(out);
+}
+
 function indexManifest(
   meta: { name: string; version?: string; cemPath: string; adapter: CemAdapter },
   manifest: CustomElementsManifest,
@@ -194,7 +226,58 @@ function indexManifest(
   }
   const bm25 = buildBm25Index(docs);
 
-  return { ...meta, manifest, elements, byTag, index, prefix, bm25, synonyms };
+  // Attribute name → tags that declare it; per-tag attribute → value-set.
+  const attrIndex = new Map<string, Set<string>>();
+  const attrValuesByTag = new Map<string, Map<string, Set<string>>>();
+  for (const decl of elements) {
+    const tag = decl.tagName!.toLowerCase();
+    for (const a of decl.attributes ?? []) {
+      const name = a.name.toLowerCase();
+      let tags = attrIndex.get(name);
+      if (!tags) {
+        tags = new Set();
+        attrIndex.set(name, tags);
+      }
+      tags.add(tag);
+      let perTag = attrValuesByTag.get(tag);
+      if (!perTag) {
+        perTag = new Map();
+        attrValuesByTag.set(tag, perTag);
+      }
+      perTag.set(name, new Set(attributeValues(a)));
+    }
+  }
+
+  // Reverse index of kebab tag tokens → tags. "accordion" → {calcite-accordion,
+  // calcite-accordion-item}. Lets us boost components when a query synonym
+  // resolves to a token that names a component.
+  const tagTokenIndex = new Map<string, Set<string>>();
+  for (const decl of elements) {
+    const tag = decl.tagName!.toLowerCase();
+    for (const token of tag.split("-")) {
+      if (!token) continue;
+      let tags = tagTokenIndex.get(token);
+      if (!tags) {
+        tags = new Set();
+        tagTokenIndex.set(token, tags);
+      }
+      tags.add(tag);
+    }
+  }
+
+  return {
+    ...meta,
+    manifest,
+    elements,
+    byTag,
+    index,
+    prefix,
+    bm25,
+    synonyms,
+    attrIndex,
+    attrValuesByTag,
+    tagTokenIndex,
+  };
 }
 
 export interface RegistryOptions {
@@ -315,19 +398,94 @@ export interface SearchHit {
   reasons: string[];
 }
 
-// Tunables for combining the fuzzy tag score with the BM25 text score.
-// BM25 scores are scaled and capped so that text relevance can rescue a
-// no-tag-match query but cannot, on its own, exceed the definitive-hit
-// promotion threshold (400). A paraphrastic match should produce a ranked
-// list, not a confident full-doc response.
+// Tunables for combining scoring channels. BM25 is capped below the 400-point
+// definitive-promotion threshold so paraphrastic matches return a ranked list
+// rather than a confident full-doc. The synonym-to-tag boost applies a fixed
+// per-tag bonus when a synonym expansion lands on a known kebab token (e.g.
+// "expandable" → "accordion" → calcite-accordion). Attribute-anchored scoring
+// runs as a separate channel triggered only when the query head is a known
+// attribute name with multiple candidates.
 const BM25_WEIGHT = 30;
 const BM25_CAP = 300;
+const TOKEN_TO_TAG_BOOST = 150; // per token, scaled by token weight (originals=1.0, synonyms=0.6)
+const TOKEN_TO_TAG_CAP = 300; // total boost cap per tag, to keep multi-token-match components from runaway
+const ATTRIBUTE_ANCHORED_BASE = 80;
+const ATTRIBUTE_ANCHORED_VALUE_BONUS = 120; // per full coverage
 
-// Combine the pre-built tag-fuzzy index with BM25 over a per-component text
-// corpus. Anchored queries (containing tag fragments) are dominated by the
-// fuzzy score; paraphrastic queries (intent without tag fragments) ride on
-// BM25. The synonym map closes the lexical gap for common UI paraphrases
-// ("toast" → "alert", "spinner" → "loader") before BM25 ever sees the query.
+// When the head token of a query is an attribute name shared by >=2 components,
+// treat the query as a category lookup ("which components have this attribute,
+// optionally with these values"). Returns per-tag scores to add to the main
+// hits map. Empty when the query doesn't look attribute-anchored.
+function attributeAnchoredScores(
+  pkg: LoadedPackage,
+  rawQuery: string,
+): Map<string, { score: number; reason: string }> {
+  const out = new Map<string, { score: number; reason: string }>();
+  // We don't go through tokenize() here because we want to preserve
+  // single-character value tokens like "s", "m", "l" that the standard
+  // tokenizer drops.
+  const raw = rawQuery
+    .toLowerCase()
+    .split(/[\s,|/]+/)
+    .filter(Boolean);
+  if (raw.length === 0) return out;
+
+  const head = raw[0];
+  const tagsWithAttr = pkg.attrIndex.get(head);
+  if (!tagsWithAttr || tagsWithAttr.size < 2) return out;
+
+  const valueTokens = raw.slice(1);
+  for (const tag of tagsWithAttr) {
+    const values = pkg.attrValuesByTag.get(tag)?.get(head) ?? new Set();
+    let matched = 0;
+    for (const vt of valueTokens) if (values.has(vt)) matched++;
+    const coverage = valueTokens.length > 0 ? matched / valueTokens.length : 0;
+    const score = ATTRIBUTE_ANCHORED_BASE + Math.round(ATTRIBUTE_ANCHORED_VALUE_BONUS * coverage);
+    const reason =
+      valueTokens.length === 0
+        ? `attribute '${head}' declared`
+        : `attribute '${head}' (${matched}/${valueTokens.length} values match)`;
+    out.set(tag, { score, reason });
+  }
+  return out;
+}
+
+// When a synonym expansion produces a token that names a known component
+// fragment (e.g. "expandable" → "accordion", and `accordion` is a kebab token
+// in `calcite-accordion`), boost that component. This fixes cases where the
+// target component has an empty description and the only place its name lives
+// is in the tag itself.
+function tokenToTagBoosts(
+  pkg: LoadedPackage,
+  expanded: Array<{ term: string; weight: number }>,
+): Map<string, { score: number; reasons: string[] }> {
+  const out = new Map<string, { score: number; reasons: string[] }>();
+  for (const { term, weight } of expanded) {
+    const tags = pkg.tagTokenIndex.get(term);
+    if (!tags) continue;
+    const lift = Math.round(TOKEN_TO_TAG_BOOST * weight);
+    for (const tag of tags) {
+      let bucket = out.get(tag);
+      if (!bucket) {
+        bucket = { score: 0, reasons: [] };
+        out.set(tag, bucket);
+      }
+      bucket.score = Math.min(TOKEN_TO_TAG_CAP, bucket.score + lift);
+      bucket.reasons.push(
+        weight === 1 ? `token '${term}' matches tag` : `synonym '${term}' matches tag`,
+      );
+    }
+  }
+  return out;
+}
+
+// Combine the pre-built tag-fuzzy index, BM25 over a per-component text
+// corpus, an attribute-anchored channel, and a synonym-to-tag boost. Anchored
+// queries (containing tag fragments) are dominated by the fuzzy score;
+// paraphrastic queries (intent without tag fragments) ride on BM25 plus the
+// synonym map plus the synonym-to-tag boost; attribute-anchored queries
+// (head token names an attribute, rest are candidate values) get their own
+// per-tag bonus and naturally produce a category list.
 export function searchElements(pkg: LoadedPackage, query: string, limit = 20): SearchHit[] {
   const q = query.trim();
   if (!q) return [];
@@ -340,6 +498,9 @@ export function searchElements(pkg: LoadedPackage, query: string, limit = 20): S
   const expanded = expandQuery(tokens, pkg.synonyms);
   const bm25Raw = scoreBm25(pkg.bm25, expanded);
 
+  const attrHits = attributeAnchoredScores(pkg, q);
+  const tagBoosts = tokenToTagBoosts(pkg, expanded);
+
   const hits: SearchHit[] = [];
   for (const decl of pkg.elements) {
     const tag = decl.tagName!.toLowerCase();
@@ -347,11 +508,29 @@ export function searchElements(pkg: LoadedPackage, query: string, limit = 20): S
     let score = tagMatch?.score ?? 0;
     const reasons: string[] = tagMatch ? [...tagMatch.reasons] : [];
 
+    const attrBoost = attrHits.get(tag);
     const raw = bm25Raw.get(tag) ?? 0;
-    if (raw > 0) {
+
+    // When attribute-anchored fires for this component, the query is a
+    // category lookup. BM25 just contributes noise (favoring components whose
+    // description happens to use the attribute name more) and breaks the
+    // intended tie across all matching components. Tag fuzzy + the attribute
+    // boost are the right signal; let alphabetical settle the rest.
+    if (raw > 0 && !attrBoost) {
       const scaled = Math.min(BM25_CAP, raw * BM25_WEIGHT);
       score += scaled;
       reasons.push(`text relevance ${raw.toFixed(2)}`);
+    }
+
+    const tagBoost = tagBoosts.get(tag);
+    if (tagBoost) {
+      score += tagBoost.score;
+      reasons.push(...tagBoost.reasons);
+    }
+
+    if (attrBoost) {
+      score += attrBoost.score;
+      reasons.push(attrBoost.reason);
     }
 
     if (score > 0) hits.push({ decl, score, reasons });

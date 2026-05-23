@@ -110,14 +110,14 @@ All fields are optional; the schema is `strict` (unknown fields throw at startup
 
 ## Fuzzy search
 
-Two indexes are built per package at load time:
+Four scoring channels combine per query, all built once at load time:
 
 - **Tag fuzzy index** (`src/fuzzy.ts`) — tuned for kebab-case tag names with a library-wide common prefix. Matches across exact tag, prefix-stripped form, PascalCase, concatenated flat, acronym, substring, and capped Levenshtein edit-distance. Strong on anchored queries (`"button"`, `"DatePicker"`, `"alrt"`, `"dp"`).
-- **BM25 text index** (`src/bm25.ts`) — Okapi BM25 over the per-component bag of words from description, summary, attribute names + descriptions, slot descriptions, event names + descriptions, CSS var / part names + descriptions, and the tag itself. Tokenizer strips stopwords and splits camelCase boundaries. Queries are expanded through a bidirectional synonym map (`src/synonyms.json`, ~40 UI-domain clusters like `toast ↔ alert`, `spinner ↔ loader`) before scoring. Strong on paraphrastic queries (`"show a temporary toast"`, `"loading spinner"`).
+- **BM25 text index** (`src/bm25.ts`) — Okapi BM25 over the per-component bag of words from description, summary, attribute names + descriptions, slot descriptions, event names + descriptions, CSS var / part names + descriptions, and the tag itself. Tokenizer strips stopwords, splits camelCase boundaries, and applies a light suffix stemmer (`loading → load`, `expandable → expand`, `buttons → button`). Queries are expanded through a bidirectional synonym map (`src/synonyms.json`, ~40 UI-domain clusters like `toast ↔ alert`, `spinner ↔ loader`) before scoring. Strong on paraphrastic queries.
+- **Token-to-tag boost** — when any query token, original or synonym-expanded, exactly names a kebab token in a component's tag, that component gets a fixed bonus (synonyms at 0.6 weight). Rescues cases like `expandable → accordion → calcite-accordion` when the component's description is empty.
+- **Attribute-anchored channel** — when the head token names an attribute shared by ≥2 components, treat the query as a category lookup. Score by attribute presence + value coverage; bypass BM25 (which would just add noise to a tie). Handles `"scale s m l"` correctly by surviving single-character value tokens that the regular tokenizer drops.
 
-The two scores combine: fuzzy dominates anchored queries, BM25 carries paraphrastic ones, both reinforce when the query has both signals. BM25's contribution is capped below the definitive-promotion threshold, so paraphrastic queries return a ranked list and the agent gets to verify rather than getting a confident wrong full-doc answer.
-
-See [`docs/adr-0001-fuzzy-search.md`](docs/adr-0001-fuzzy-search.md) for benchmarks: 100% top-1 anchored, 58% top-1 paraphrastic, 86% overall on the hand-curated 44-case real-world set.
+See [`docs/adr-0001-fuzzy-search.md`](docs/adr-0001-fuzzy-search.md) for benchmarks: **100% top-1 anchored, 92% top-1 paraphrastic, 100% top-1 attribute-anchored, 98% overall on the hand-curated 44-case real-world set. Top-3: 100%.**
 
 ## Scripts
 
@@ -132,7 +132,7 @@ npm run fetch-libs     # populate test/fixtures/project with 10 libraries
 
 ## Known limitations
 
-- **Paraphrastic queries** are at 58% top-1 / ~83% top-3 on the hand-curated real-world bench. Up from 50% before the BM25 text index landed; remaining misses cluster on novel paraphrases the synonym map doesn't know (`expandable section → calcite-accordion`) and genuinely ambiguous queries (`scale s m l` matches dozens of components). Extending `synonyms.extend` in config closes specific gaps; the big jump from here would need a small embedding model and isn't built.
+- **Paraphrastic queries** are at 92% top-1 / 100% top-3 on the hand-curated real-world bench. The single remaining miss (`expandable section → calcite-block-section` instead of `calcite-accordion-item`) is defensible — `block-section` literally contains "section". Extending `synonyms.extend` in config closes specific gaps; the path beyond 92% would need either substantial synonym curation or a small embedding model and isn't built.
 - **2-letter acronyms** with multiple plausible expansions (e.g. `cb` for `calcite-button` vs `calcite-block`) are inherently ambiguous and tied on score. We fall back to alphabetical; this is sometimes wrong.
 - **No support yet** for components declared only through `module.exports[]` `custom-element-definition` entries (some Lit/FAST patterns). None of the 8 working libraries in the bench use this pattern.
 - **No live reload.** Adding/upgrading a package requires restarting the server.

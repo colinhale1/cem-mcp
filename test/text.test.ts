@@ -1,7 +1,40 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { tokenize } from "../src/text.js";
+import { stem, tokenize } from "../src/text.js";
+
+describe("stem", () => {
+  it("strips -able and -ible from long-enough words", () => {
+    assert.equal(stem("expandable"), "expand");
+    assert.equal(stem("collapsible"), "collaps");
+  });
+
+  it("strips -ing, -ed, -ly", () => {
+    assert.equal(stem("loading"), "load");
+    assert.equal(stem("loaded"), "load");
+    assert.equal(stem("quickly"), "quick");
+  });
+
+  it("strips plural -s only when long enough and not -ss / -us", () => {
+    assert.equal(stem("buttons"), "button");
+    assert.equal(stem("alias"), "alias"); // 5 chars, would over-stem
+    assert.equal(stem("status"), "status"); // -us, preserved
+    assert.equal(stem("classes"), "classe"); // -es is fine, -ss not stripped
+  });
+
+  it("leaves short words alone", () => {
+    assert.equal(stem("tab"), "tab");
+    assert.equal(stem("this"), "this");
+    assert.equal(stem("was"), "was");
+  });
+
+  it("does not over-stem common UI nouns", () => {
+    // notification once tripped an over-aggressive -ation rule.
+    assert.equal(stem("notification"), "notification");
+    assert.equal(stem("indicator"), "indicator");
+    assert.equal(stem("accordion"), "accordion");
+  });
+});
 
 describe("tokenize", () => {
   it("lowercases, drops short tokens, drops stopwords", () => {

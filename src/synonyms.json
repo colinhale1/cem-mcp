@@ -1,10 +1,11 @@
 {
   "version": 1,
   "synonyms": {
-    "toast": ["alert", "notification", "snackbar"],
-    "snackbar": ["alert", "notification", "toast"],
-    "notification": ["alert", "notify", "toast"],
+    "toast": ["alert", "notification", "snackbar", "message"],
+    "snackbar": ["alert", "notification", "toast", "message"],
+    "notification": ["alert", "notify", "toast", "message"],
     "banner": ["alert", "notification"],
+    "message": ["notification", "alert", "toast"],
 
     "spinner": ["loader", "loading"],
     "loader": ["spinner", "loading"],
