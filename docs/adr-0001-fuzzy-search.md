@@ -103,3 +103,30 @@ By query kind across all libraries:
 4. **Some packages ship neither a CEM nor a useful equivalent.** `@material/web` has no `customElements` field and no fallback manifest. `@microsoft/fast-foundation` ships a schema 1.0 manifest with framework primitives but no `tagName` on any declaration (their component package was deprecated separately). Discovery silently skips both. This is the right outcome — we surface only packages that can actually answer a query.
 
 5. **The latency picture stayed the same.** Both matchers remain well under 0.1 ms/query at this dataset scale. The 10× factor between them is real but invisible.
+
+## Second addendum: paraphrastic queries expose the real ceiling
+
+The first two benches (calcite-only hand-curated, then auto-generated across libraries) both used queries derived from the tag identity itself — exact tags, prefix-stripped names, PascalCase forms, typos of those forms. They measured whether the matcher can resolve queries that look like a tag. They don't measure whether the matcher can resolve queries that describe *intent*.
+
+`bench/real-world.ts` adds a third bench: 44 hand-curated cases across six libraries, split into three kinds:
+
+- **anchored** — query includes at least a tag fragment ("button", "DatePicker", "alrt")
+- **paraphrastic** — query is intent-only ("show a temporary toast", "loading spinner", "expandable section")
+- **attribute-anchored** — query names an attribute the agent saw used somewhere ("scale s m l")
+
+Results:
+
+| kind                | cases | custom top-1   | fuzzysort top-1 |
+| ------------------- | ----- | -------------- | --------------- |
+| anchored            | 31    | **100%**       | 97%             |
+| paraphrastic        | 12    | **50%**        | **0%**          |
+| attribute-anchored  | 1     | 0%             | 0%              |
+| **overall**         | **44**| **84%**        | **68%**         |
+
+What this says:
+
+- **Anchored is solved.** Both matchers find the right tag whenever the query references the tag's name, modulo typos and case forms. The custom matcher wins by one (it tolerates more typo categories), but for queries that include any tag fragment the agent is well served by either.
+- **Paraphrastic is the real ceiling.** The custom matcher gets 50% only because description-substring scoring sometimes catches a literal word from the query ("color picker swatch" → `sl-color-picker`, "show a banner alert" → `nord-banner`). It loses on "expandable section" (it's an accordion, but neither tag nor description say "expandable") and "loading spinner" (the calcite tag is `calcite-loader` — no "spinner" or "loading" in tag, and the description doesn't mention "spinner"). Fuzzysort gets 0% because char-in-order matching offers nothing for queries that don't share characters in order with the tag.
+- **The honest 84% overall number** is what someone using this tool against real LLM input should expect today. The 100% from the auto-generated bench was internal consistency; this is empirical quality.
+
+What the paraphrastic miss tells us: **the next meaningful improvement is a small text index over descriptions, slot descriptions, event descriptions, and attribute descriptions** — likely with stemming or at least a stop-word list. That's not a fuzzy-matcher problem; it's a missing component. Filed as future work.

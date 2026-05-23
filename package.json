@@ -1,6 +1,6 @@
 {
   "name": "cem-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server that delivers repo-accurate web component documentation from Custom Elements Manifests in a project's node_modules.",
   "type": "module",
   "bin": {
@@ -15,9 +15,10 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "smoke": "tsx test/smoke.ts",
+    "test": "node --import tsx --test test/*.test.ts",
     "bench": "tsx bench/compare.ts",
     "bench:multi": "tsx bench/multi.ts",
+    "bench:realworld": "tsx bench/real-world.ts",
     "fetch-calcite": "node scripts/fetch-calcite-cem.mjs",
     "fetch-libs": "node scripts/fetch-libs.mjs"
   },

@@ -10,20 +10,38 @@ const truncate = (s: string, n: number): string =>
 export function formatPackageList(
   packages: DiscoveredPackage[],
   projectRoot: string | null,
+  configPath: string | null = null,
 ): string {
   const lines: string[] = [];
   lines.push(`# Available packages (${packages.length})`);
   if (projectRoot) lines.push(`Project: \`${projectRoot}\``);
+  if (configPath) lines.push(`Config: \`${configPath}\``);
   lines.push("");
   if (packages.length === 0) {
-    lines.push("_No packages with a Custom Elements Manifest found in `node_modules`._");
+    lines.push("_No packages with a Custom Elements Manifest found._");
     lines.push("");
-    lines.push("Try installing a web-components library (e.g. `@esri/calcite-components`) or pointing the server at a different project with `--project`.");
+    lines.push("Things to check:");
+    lines.push(
+      "- Is `node_modules` populated in the project root? Discovery scans `<project>/node_modules`.",
+    );
+    lines.push("- Does the project actually depend on a web-components library?");
+    lines.push(
+      "  Examples that ship a CEM the server can read: `@esri/calcite-components`, " +
+        "`@shoelace-style/shoelace`, `@patternfly/elements`, `@rhds/elements`, " +
+        "`@nordhealth/components`, `@ui5/webcomponents`, `@carbon/web-components`, `@cds/core`.",
+    );
+    lines.push(
+      "- If you have a CEM at a path outside `node_modules`, register it via `cem.config.json`:",
+    );
+    lines.push("  ```json");
+    lines.push('  { "paths": { "@my/lib": "./vendor/my-lib/custom-elements.json" } }');
+    lines.push("  ```");
     return lines.join("\n");
   }
   for (const p of packages) {
     const v = p.version ? `@${p.version}` : "";
-    lines.push(`- \`${p.name}${v}\``);
+    const adapter = p.adapter.name === "cem2" ? "" : ` _via ${p.adapter.name}_`;
+    lines.push(`- \`${p.name}${v}\`${adapter}`);
   }
   lines.push("");
   lines.push("_Call this tool with `package: \"<name>\"` to list its components, or with `package` + `query` to look something up._");

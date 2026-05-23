@@ -1,6 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import {
+  builtinAdapters,
+  selectAdapters,
+  findAdapter,
+  type CemAdapter,
+} from "./adapters/index.js";
+import { applyPackageFilter, loadConfig, type ResolvedConfig } from "./config.js";
 import { buildIndex, fuzzySearchTags, type FuzzyMatch, type TagIndex } from "./fuzzy.js";
 import { discoverPackages, type DiscoveredPackage } from "./discovery.js";
 
@@ -83,6 +90,7 @@ export interface LoadedPackage {
   name: string;
   version?: string;
   cemPath: string;
+  adapter: CemAdapter;
   manifest: CustomElementsManifest;
   elements: CemDeclaration[];
   byTag: Map<string, CemDeclaration>;
@@ -90,13 +98,22 @@ export interface LoadedPackage {
   prefix: string; // common tag prefix (e.g. "calcite")
 }
 
-async function loadManifest(cemPath: string): Promise<CustomElementsManifest> {
+async function loadManifestThroughAdapter(
+  cemPath: string,
+  adapter: CemAdapter,
+): Promise<CustomElementsManifest> {
   const raw = await readFile(cemPath, "utf8");
-  const parsed = JSON.parse(raw) as CustomElementsManifest;
-  if (!parsed || !Array.isArray(parsed.modules)) {
-    throw new Error(`Not a valid Custom Elements Manifest: ${cemPath}`);
+  const parsed = JSON.parse(raw);
+  if (!adapter.matches(parsed)) {
+    throw new Error(
+      `Adapter ${adapter.name} no longer matches ${cemPath} (file may have changed on disk).`,
+    );
   }
-  return parsed;
+  const manifest = adapter.load(parsed, cemPath);
+  if (!manifest || !Array.isArray(manifest.modules)) {
+    throw new Error(`Adapter ${adapter.name} produced an invalid manifest from ${cemPath}.`);
+  }
+  return manifest;
 }
 
 // HTML custom-element names must contain a hyphen and be ASCII-lowercase
@@ -109,7 +126,7 @@ function isValidCustomElementTag(tag: string): boolean {
 }
 
 function indexManifest(
-  meta: { name: string; version?: string; cemPath: string },
+  meta: { name: string; version?: string; cemPath: string; adapter: CemAdapter },
   manifest: CustomElementsManifest,
 ): LoadedPackage {
   const elements: CemDeclaration[] = [];
@@ -126,19 +143,77 @@ function indexManifest(
   return { ...meta, manifest, elements, byTag, index, prefix };
 }
 
+export interface RegistryOptions {
+  /** Optional explicit config path. If omitted, looks for cem.config.json in the project root. */
+  configPath?: string;
+}
+
 export class CemRegistry {
   private readonly packages = new Map<string, LoadedPackage>();
   private readonly known = new Map<string, DiscoveredPackage>();
   readonly projectRoot: string | null;
+  readonly config: ResolvedConfig;
+  readonly adapters: ReadonlyArray<CemAdapter>;
 
-  constructor(projectRoot: string | null) {
+  private constructor(
+    projectRoot: string | null,
+    config: ResolvedConfig,
+    adapters: ReadonlyArray<CemAdapter>,
+  ) {
     this.projectRoot = projectRoot;
+    this.config = config;
+    this.adapters = adapters;
   }
 
-  static async fromProject(projectRoot: string): Promise<CemRegistry> {
-    const reg = new CemRegistry(resolve(projectRoot));
-    const discovered = await discoverPackages(reg.projectRoot!);
+  static async fromProject(
+    projectRoot: string,
+    options: RegistryOptions = {},
+  ): Promise<CemRegistry> {
+    const root = resolve(projectRoot);
+    const config = await loadConfig(root, options.configPath);
+    const adapters = selectAdapters(builtinAdapters, config.config.adapters?.disable);
+    const reg = new CemRegistry(root, config, adapters);
+
+    // Discovery (auto from node_modules).
+    const discovered = await discoverPackages(root, adapters);
     for (const d of discovered) reg.known.set(d.name, d);
+
+    // Manual path overrides from config — added in addition to discovered, win on
+    // name conflict because the user explicitly asked for them.
+    const manualPaths = config.config.paths ?? {};
+    for (const [name, relPath] of Object.entries(manualPaths)) {
+      const abs = resolve(config.baseDir, relPath);
+      // Determine adapter eagerly so a misconfigured path fails fast at startup.
+      const raw = await readFile(abs, "utf8").catch(() => null);
+      if (raw == null) {
+        throw new Error(`Config path for '${name}' not found: ${abs}`);
+      }
+      const parsed = JSON.parse(raw);
+      const adapter = findAdapter(adapters, parsed);
+      if (!adapter) {
+        throw new Error(
+          `Config path for '${name}' (${abs}) does not match any known adapter (${adapters
+            .map((a) => a.name)
+            .join(", ")}).`,
+        );
+      }
+      reg.known.set(name, {
+        name,
+        version: undefined,
+        packageDir: "",
+        cemPath: abs,
+        adapter,
+      });
+    }
+
+    // Apply include/exclude filtering.
+    const allowed = new Set(
+      applyPackageFilter(Array.from(reg.known.keys()), config.config.packages),
+    );
+    for (const k of Array.from(reg.known.keys())) {
+      if (!allowed.has(k)) reg.known.delete(k);
+    }
+
     return reg;
   }
 
@@ -164,15 +239,10 @@ export class CemRegistry {
         `Unknown package '${name}'. Available: ${this.packageNames().join(", ") || "(none)"}`,
       );
     }
-    const manifest = await loadManifest(meta.cemPath);
+    const manifest = await loadManifestThroughAdapter(meta.cemPath, meta.adapter);
     const loaded = indexManifest(meta, manifest);
     this.packages.set(name, loaded);
     return loaded;
-  }
-
-  // Test/script helper: register a package manually (skipping discovery).
-  registerManual(name: string, cemPath: string, version?: string): void {
-    this.known.set(name, { name, version, packageDir: "", cemPath: resolve(cemPath) });
   }
 }
 

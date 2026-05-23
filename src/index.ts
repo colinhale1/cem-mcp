@@ -16,14 +16,21 @@ import {
   formatPackageList,
   formatSearch,
 } from "./format.js";
+import { suggestPackages } from "./suggest.js";
+
+function readFlag(name: string): string | undefined {
+  const eq = process.argv.find((a) => a.startsWith(`${name}=`))?.slice(`${name}=`.length);
+  if (eq !== undefined) return eq;
+  const idx = process.argv.indexOf(name);
+  return idx >= 0 ? process.argv[idx + 1] : undefined;
+}
 
 function resolveProjectRoot(): string {
-  const flagIdx = process.argv.indexOf("--project");
-  const fromPositional = flagIdx >= 0 ? process.argv[flagIdx + 1] : undefined;
-  const fromEqFlag = process.argv
-    .find((a) => a.startsWith("--project="))
-    ?.slice("--project=".length);
-  return resolve(fromEqFlag ?? fromPositional ?? process.env.CEM_PROJECT ?? process.cwd());
+  return resolve(readFlag("--project") ?? process.env.CEM_PROJECT ?? process.cwd());
+}
+
+function resolveConfigPath(): string | undefined {
+  return readFlag("--config") ?? process.env.CEM_CONFIG;
 }
 
 const TOOL_NAME = "get_component_docs";
@@ -38,7 +45,7 @@ const TOOL_DESCRIPTION = [
   "- `package` + `query` → dispatch the query against that package:",
   '  - `query: "all"` → list components (same as omitting query)',
   "  - exact tag name (case-insensitive) → full docs (attributes, properties, methods, events, slots, CSS vars, CSS parts)",
-  "  - any other term → ranked fuzzy search across tag names, descriptions, attributes, events, slots, and CSS variables. A single hit returns full docs directly.",
+  "  - any other term → ranked fuzzy search across tag names, descriptions, attributes, events, slots, and CSS variables. A clear-winner hit returns full docs directly.",
   "",
   "Pass `query` as a string for one lookup, or an array of strings to look up several components from the same package in one call.",
 ].join("\n");
@@ -50,10 +57,9 @@ const ToolInput = z.object({
     .optional(),
 });
 
-// A fuzzy result is "definitive" when its score is high in absolute terms
-// and decisively above the runner-up. See docs/adr-0001-fuzzy-search.md for
-// the scoring tiers these thresholds correspond to: 400 sits above acronym
-// (~300) and partial token-set matches, and pulls in pascal/flat exacts.
+// A fuzzy result is "definitive" when its score is high in absolute terms and
+// decisively above the runner-up. Thresholds derived empirically; see
+// docs/adr-0001-fuzzy-search.md.
 const PROMOTE_MIN_SCORE = 400;
 const PROMOTE_MIN_RATIO = 2;
 
@@ -81,12 +87,31 @@ function handleQueries(pkg: LoadedPackage, queries: string[]): string {
   return formatMulti(pkg.name, sections);
 }
 
+function unknownPackageMessage(pkgName: string, available: string[]): string {
+  const lines: string[] = [];
+  lines.push(`Package \`${pkgName}\` was not found in the project.`);
+  if (available.length === 0) {
+    lines.push("");
+    lines.push("No packages with a Custom Elements Manifest are installed under the project root.");
+    return lines.join("\n");
+  }
+  const suggestions = suggestPackages(pkgName, available);
+  if (suggestions.length) {
+    lines.push("");
+    lines.push(`Did you mean: ${suggestions.map((n) => `\`${n}\``).join(", ")}?`);
+  }
+  lines.push("");
+  lines.push(`Available: ${available.map((n) => `\`${n}\``).join(", ")}`);
+  return lines.join("\n");
+}
+
 async function main(): Promise<void> {
   const projectRoot = resolveProjectRoot();
-  const registry = await CemRegistry.fromProject(projectRoot);
+  const configPath = resolveConfigPath();
+  const registry = await CemRegistry.fromProject(projectRoot, { configPath });
 
   const server = new Server(
-    { name: "cem-mcp", version: "0.2.0" },
+    { name: "cem-mcp", version: "0.3.0" },
     { capabilities: { tools: {} } },
   );
 
@@ -145,20 +170,23 @@ async function main(): Promise<void> {
           content: [
             {
               type: "text",
-              text: formatPackageList(registry.packagesMeta(), registry.projectRoot),
+              text: formatPackageList(
+                registry.packagesMeta(),
+                registry.projectRoot,
+                registry.config.sourcePath,
+              ),
             },
           ],
         };
       }
 
       if (!registry.has(pkgName)) {
-        const available = registry.packageNames();
-        const text =
-          `Package \`${pkgName}\` was not found in the project.\n\n` +
-          (available.length
-            ? `Available: ${available.map((n) => `\`${n}\``).join(", ")}`
-            : "No packages with a Custom Elements Manifest are installed under the project root.");
-        return { isError: true, content: [{ type: "text", text }] };
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: unknownPackageMessage(pkgName, registry.packageNames()) },
+          ],
+        };
       }
 
       const pkg = await registry.get(pkgName);
@@ -178,8 +206,10 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // stderr only — stdout is reserved for MCP protocol traffic.
+  const pkgCount = registry.packageNames().length;
+  const cfg = registry.config.sourcePath ? ` · config ${registry.config.sourcePath}` : "";
   process.stderr.write(
-    `cem-mcp ready · project ${projectRoot} · ${registry.packageNames().length} package(s) discovered\n`,
+    `cem-mcp ready · project ${projectRoot} · ${pkgCount} package(s) discovered${cfg}\n`,
   );
 }
 
