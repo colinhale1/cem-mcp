@@ -4,6 +4,62 @@ All notable changes to `cem-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-23
+
+Phase 1 of the post-1.1 roadmap: extends `validate_component_usage` to cover
+properties, event handlers, and per-package deprecations. Adds the
+declarative extensibility scaffolding (overlays + rule registry + config v2)
+that everything else in the roadmap builds on. See ADRs 0003, 0004, 0005,
+and the ADR-0002 amendment.
+
+### Added
+
+- **Overlays.** Per-package JSON file referenced from `cem.config.json` adds
+  `examples`, `usage`, and `deprecated.{attrs,events,properties}` to any
+  component. Strict Zod schema; additive only — cannot rename/remove/retype
+  CEM-sourced fields. See ADR-0005.
+- **Rule registry.** `validate_component_usage` is now a thin driver over a
+  named-rule registry (`BUILTIN_RULES`). Individual rules can be disabled
+  via `cem.config.json` → `validate.rules.disable: ["invalid-value", ...]`.
+- **`unknown-property` rule.** Flags `.foo=` bindings whose name isn't a
+  public field on the tag. Closes the ~500-prop-per-library gap from the
+  audit. Includes camelCase suggestion for kebab-cased property bindings
+  (`.complex-object` → `.complexObject`).
+- **`unknown-event` rule.** Flags `@foo=` handlers not declared on the
+  component. Strips Vue/Lit modifiers (`@click.stop` → checks `click`).
+  Conservative native-DOM-event allowlist passes through `@click`,
+  `@keydown`, etc. without flagging.
+- **`deprecated-field` rule.** Reads `decl.overlay.deprecated.*` and flags
+  any deprecated attr/event/property usage with the overlay-supplied
+  replacement hint.
+- **Cross-prefix hint** inside `unknown-attr` and `unknown-property`. When
+  the agent uses the wrong form for a known field, the message points at
+  the right form: `<calcite-combobox>` has no attribute `filteredItems`,
+  but it does have a property — try `.filteredItems=${…}`.
+- **Per-package config v2.** `cem.config.json` → `packages.<name>.{ path, overlay }`.
+  Backwards-compatible — existing top-level `paths` and
+  `packages.include/exclude` keep working.
+- **MCP resources design (ADR-0004).** Spec-only — implementation deferred.
+
+### Changed
+
+- `aspect: 'examples'` now sources from `decl.overlay.examples` rather than
+  `@example` JSDoc extraction. The audit found zero examples in `@example`
+  blocks across the 9 bench libraries. Compact view shows `examples (N)`
+  only when an overlay supplies them; otherwise the section is omitted.
+  See ADR-0002 amendment.
+- Compact view now shows a `Usage:` line when overlay supplies it.
+- `aspect: 'all'` / full view picks up a new `## usage` section when
+  overlay supplies it.
+- Parser preserves case on `.foo=` and `@foo=` bindings (JS identifiers
+  and DOM event names are case-sensitive; HTML attribute names remain
+  lowercased per spec).
+
+### Tests
+
+117 → 145 (+28). All 117 from 1.1 pass unchanged, proving the
+rule-registry refactor is behavior-preserving.
+
 ## [1.1.0] - 2026-05-23
 
 Tool-surface redesign for context hygiene. See [ADR-0002](docs/adr-0002-tool-shape.md).

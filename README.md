@@ -83,7 +83,45 @@ Section names in compact output match `aspect` values 1:1, so the agent can targ
 
 ### `validate_component_usage(snippet, package?)`
 
-Lint an HTML snippet against the loaded CEMs. Catches: unknown custom elements, unknown attributes per tag, and enum-typed attribute values outside the declared union. HTML-only; skips `data-*` / `aria-*` / `on*` / dynamic bindings (`:`, `@`, `.`, `?`).
+Lint an HTML snippet against the loaded CEMs. Catches:
+
+- Unknown custom elements (with did-you-mean across same-prefix tags).
+- Unknown attributes (`foo="x"`) per tag.
+- Unknown property bindings (`.foo=${x}`) per tag — including kebab-cased syntax with camelCase suggestion.
+- Unknown event handlers (`@foo="h"`) per tag — strips Vue/Lit modifiers (`@click.stop`); native DOM events pass through.
+- Enum-typed attribute values outside the declared union.
+- Cross-prefix hints — e.g. `<calcite-combobox filteredItems="x">` returns _"`<calcite-combobox>` has no attribute `filteredItems`, but it does have a property — try `.filteredItems=${…}`"_.
+- Deprecation warnings sourced from per-package overlays (see "Per-package overlays" below).
+
+HTML-only; skips `data-*` / `aria-*` / `on*` attributes. Individual rules can be disabled in `cem.config.json` (see "Configuration").
+
+### Per-package overlays
+
+CEMs don't ship usage examples or deprecation labels. Augment them via a per-package overlay file referenced from `cem.config.json`:
+
+```jsonc
+// cem.config.json
+{
+  "packages": {
+    "@acme/design-system": { "overlay": "./cem-overlays/acme.json" },
+  },
+}
+```
+
+```jsonc
+// cem-overlays/acme.json
+{
+  "elements": {
+    "acme-button": {
+      "examples": ["<acme-button variant=\"primary\">Save</acme-button>"],
+      "usage": "Always pair with `<acme-form-group>` for label/error UX.",
+      "deprecated": { "attrs": { "type": "use `variant` instead" } },
+    },
+  },
+}
+```
+
+Overlays are additive only — they cannot rename, remove, or retype CEM-sourced fields. See [ADR-0005](docs/adr-0005-extensibility.md) for the full schema and design.
 
 If the agent asks for an unknown package, the error includes a **Did you mean?** suggestion.
 
