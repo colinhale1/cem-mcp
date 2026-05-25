@@ -95,6 +95,12 @@ Lint an HTML snippet against the loaded CEMs. Catches:
 
 HTML-only; skips `data-*` / `aria-*` / `on*` attributes. Individual rules can be disabled in `cem.config.json` (see "Configuration").
 
+### MCP resources (1.3+)
+
+Every loaded component is also exposed as an MCP resource at `cem://<package>/<tag>` (e.g. `cem://@shoelace-style/shoelace/sl-button`). Clients can pin them into the conversation so the agent stops re-fetching the same compact view across a long task. The content is the compact view (~300 tokens); drill-downs still go through the tool.
+
+The validation bench shows pinning trims **15–22%** of per-session I/O on re-read-heavy sessions when the agent skips `resources/list` and constructs URIs directly from tag names. See [ADR-0004](docs/adr-0004-mcp-resources.md) for the data and the design rationale.
+
 ### Per-package overlays
 
 CEMs don't ship usage examples or deprecation labels. Augment them via a per-package overlay file referenced from `cem.config.json`:

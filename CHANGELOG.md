@@ -4,6 +4,45 @@ All notable changes to `cem-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-05-25
+
+ADR-0004: MCP resources surface, with a validation bench measuring the
+actual per-session context savings.
+
+### Added
+
+- **MCP resources** at `cem://<package>/<tag>`. Every loaded component is
+  exposed as a pinnable resource; content is the compact view (~300
+  tokens) so a pinned component fits comfortably in long-session context.
+  - `resources/list` returns the full catalog (711 entries against the
+    bench fixture).
+  - `resources/read` returns the compact-view markdown for one URI.
+    Case-insensitive on the tag segment.
+  - Server now declares `resources: {}` in MCP capabilities.
+- **`bench/session-context.ts`** + `npm run bench:session`. Measures
+  per-session context cost across three configurations (tool-only,
+  resources+list, resources no-list) on four hand-curated multi-turn
+  sessions. Used to validate ADR-0004 before merge.
+
+### Validation results
+
+| Configuration       | Total bytes | vs tool-only |
+| ------------------- | ----------: | -----------: |
+| tool-only (1.2)     |      29,050 |            — |
+| resources + list    |     396,247 |     **+1264%** |
+| resources, no list  |      24,291 |     **−16.4%** |
+
+Net: **15–22% reduction** on re-read-heavy sessions when the agent skips
+`resources/list` and constructs URIs directly. Full validation, including
+per-session breakdown and the "catalog is a trap" finding, in
+[ADR-0004](docs/adr-0004-mcp-resources.md#validation-added-2026-05-25).
+
+### Tests
+
+145 → 155. Adds URI parser tests, listResources/readResource tests
+(including error paths for unknown package, unknown tag, case-insensitive
+tag lookup), plus an end-to-end MCP stdio smoke verified live.
+
 ## [1.2.0] - 2026-05-23
 
 Phase 1 of the post-1.1 roadmap: extends `validate_component_usage` to cover

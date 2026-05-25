@@ -1,6 +1,6 @@
 {
   "name": "cem-mcp",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "MCP server that delivers repo-accurate web component documentation from Custom Elements Manifests in a project's node_modules.",
   "type": "module",
   "bin": {
@@ -37,6 +37,7 @@
     "bench": "tsx bench/compare.ts",
     "bench:multi": "tsx bench/multi.ts",
     "bench:realworld": "tsx bench/real-world.ts",
+    "bench:session": "tsx bench/session-context.ts",
     "fetch-calcite": "node scripts/fetch-calcite-cem.mjs",
     "fetch-libs": "node scripts/fetch-libs.mjs",
     "pack:check": "node scripts/pack-check.mjs",

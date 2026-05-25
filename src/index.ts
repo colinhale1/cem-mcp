@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
+  ReadResourceRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +28,7 @@ import {
   type Aspect,
   type CrossPackageHit,
 } from "./format.js";
+import { CEM_RESOURCE_MIME, listResources, readResource } from "./resources.js";
 import { suggestPackages } from "./suggest.js";
 import { formatValidationResult, validateSnippet } from "./validate.js";
 
@@ -314,7 +320,10 @@ async function main(): Promise<void> {
   const configPath = resolveConfigPath();
   const registry = await CemRegistry.fromProject(projectRoot, { configPath });
 
-  const server = new Server({ name: "cem-mcp", version: "0.4.0" }, { capabilities: { tools: {} } });
+  const server = new Server(
+    { name: "cem-mcp", version: "1.2.0" },
+    { capabilities: { tools: {}, resources: {} } },
+  );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
@@ -489,6 +498,26 @@ async function main(): Promise<void> {
     return {
       isError: true,
       content: [{ type: "text", text: `Unknown tool: ${req.params.name}` }],
+    };
+  });
+
+  // MCP resources (ADR-0004). One entry per loaded component at
+  // `cem://<pkg>/<tag>`. Content is the compact view (~300 tokens) so a
+  // pinned component fits comfortably in long-session context.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: await listResources(registry),
+  }));
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+    const text = await readResource(registry, req.params.uri);
+    return {
+      contents: [
+        {
+          uri: req.params.uri,
+          mimeType: CEM_RESOURCE_MIME,
+          text,
+        },
+      ],
     };
   });
 

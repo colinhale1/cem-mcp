@@ -1,7 +1,7 @@
 # ADR 0004 — MCP Resources for pinnable component context
 
-- Status: Accepted (design only — implementation deferred per the post-1.1 plan)
-- Date: 2026-05-23
+- Status: Accepted (implemented in 1.3; design validated by `bench/session-context.ts`)
+- Date: 2026-05-23 (designed); 2026-05-25 (implemented + validated)
 - Deciders: maintainer
 - Replaces / replaced by: builds on ADR-0002
 
@@ -88,4 +88,82 @@ The per-aspect URI rejection was the same single-intent-tool reasoning as ADR-00
 
 - **Per-call cost (output shape) and per-session cost (re-query frequency) are different problems with different solutions.** Compact views solve the first; pinnable resources solve the second. Conflating them — e.g. trying to make tools "stateful" so they remember prior calls — would be a worse fit than reaching for the protocol's stateful primitive.
 - **MCP primitives encode intent.** "Tool" reads as "an action I can take"; "resource" reads as "a document I can refer to." Choosing the right primitive at the protocol level shapes how agents (and human users) think about the surface. A doc lookup _is_ a document — it should be a resource, not just a tool that returns one.
-- **The catalog size question is empirical, not theoretical.** At our current scale (500 components, 150 KB) the simplest answer (one big list) works. Designing pagination upfront would have added complexity for a problem we don't have.
+- **The catalog size question is empirical, not theoretical.** The design assumed "one big list" was fine at 500 components / ~150 KB. The validation bench (below) revealed it isn't — surfacing the full list to an LLM dwarfs the per-call savings by an order of magnitude. The implementation ships the full catalog (clients control surfacing) but the docs steer agents toward URI construction.
+
+## Validation (added 2026-05-25)
+
+Before merging, `bench/session-context.ts` was built to measure per-session
+context cost on hand-curated multi-turn coding sessions. Four sessions mirror
+real agent behavior patterns surfaced by the post-1.1 head-to-head
+evaluation: building a form with three components, configuring one complex
+component, comparing the same primitive across three libraries, and a single
+short lookup (the worst case for pinning). Three configurations are measured:
+
+- `tool-only` — the 1.2 baseline. Every component reference is a
+  `get_component_docs` call.
+- `resources+list` — agent calls `resources/list` at session start to
+  discover URIs, then pins via `resources/read`. The "worst case" for
+  clients that surface the full list to the LLM.
+- `resources, no list` — realistic best case. Agent skips `resources/list`
+  and constructs URIs directly (`cem://pkg/tag`) from names it already
+  knows.
+
+Cost model: JSON-stringified bytes of request + response per call, summed.
+Approximates tokens at 4 bytes/token (conservative English heuristic).
+The harness runs the real registry code paths.
+
+| Session                  |  tool-only | resources+list | resources no-list |  Δ no-list |
+| ------------------------ | ---------: | -------------: | ----------------: | ---------: |
+| build-shoelace-form      |     10,722 |        102,125 |             9,136 |   **−15%** |
+| calcite-combobox-config  |      7,436 |         98,793 |             5,804 |   **−22%** |
+| cross-library-comparison |      9,953 |        101,409 |             8,420 |   **−15%** |
+| short-single-lookup      |        939 |         93,920 |               931 |    **−1%** |
+| **TOTAL**                | **29,050** |    **396,247** |        **24,291** | **−16.4%** |
+
+### What the data says
+
+**Headline.** With `resources/list` skipped, MCP resources reduce per-session
+I/O by **~16%** on average, with savings up to **22%** on re-read-heavy
+single-component sessions. The win comes entirely from avoiding repeated
+compact-view fetches when the agent re-references a component (after context
+compaction, plan change, or coming back to a tag mid-task). On a short
+session with no re-reads, the change is a wash (−1%).
+
+**The catalog is a trap.** Calling `resources/list` against a 500+ component
+project costs ~91 KB / ~23 K tokens before the session does any work.
+That's 10–100× the savings the pinning model unlocks. Two coping strategies:
+
+- **For agents:** construct URIs directly (`cem://pkg/tag`) from names
+  discovered via a single `get_component_docs(query="button")` call.
+  Skip `resources/list` for known components.
+- **For clients:** surface the catalog via UI (treeview, pin picker)
+  without injecting the full list into the LLM's context. This is how
+  Claude Code handles it today.
+
+### Verdict
+
+Implementation merged. Real but modest benefit (15–22% on re-read-heavy
+sessions; near-zero on short sessions). Justification rests on three
+factors beyond raw byte savings:
+
+1. **Long sessions compound.** A 30-turn coding task with 5 re-references
+   per component is realistic; the savings scale with session length.
+2. **User-facing pin UX.** Some clients (Claude Code among them) surface
+   resources as pinnable affordances the user can attach. This shortcuts
+   the discovery phase entirely — value not captured by the bench.
+3. **Cost of the alternative is zero.** Resources are additive; existing
+   tool consumers see no change. The implementation is ~80 LOC.
+
+### Revisions to the original design
+
+- **Tool description** updated to instruct agents to construct
+  `cem://pkg/tag` URIs from tags they've already discovered, rather than
+  calling `resources/list` habitually. Skipping the list is the default
+  path. (Pending — to land with a CHANGELOG entry that links here.)
+- **The `resources/list` response shape stays unchanged** — clients that
+  want it (for UX) get the full catalog. The cost is documented but not
+  hidden.
+- **Pagination still deferred.** At 711 components in the bench fixture
+  the list is 91 KB; a 5000-component project would be ~640 KB and warrant
+  paging via the MCP `cursor` mechanism. Implement when a real project
+  reports the threshold.
